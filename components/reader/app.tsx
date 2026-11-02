@@ -27,10 +27,19 @@ export default function ReaderApp() {
   );
 }
 
+/** Opens the sidebar if needed, then waits for the search bar to exist. */
+function focusSearch(setSidebarOpen: (open: boolean) => void) {
+  setSidebarOpen(true);
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() =>
+      document.getElementById("search-input")?.focus(),
+    ),
+  );
+}
+
 function Shell() {
   const {
     route,
-    navigate,
     ready,
     sidebarOpen,
     drawerOpen,
@@ -46,15 +55,12 @@ function Shell() {
     const key = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        navigate({ name: "search", query: "" });
-        requestAnimationFrame(() =>
-          document.getElementById("search-input")?.focus(),
-        );
+        focusSearch(setSidebarOpen);
       }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [navigate]);
+  }, [setSidebarOpen]);
 
   return (
     <div
@@ -130,6 +136,43 @@ function Shell() {
   );
 }
 
+function SidebarSearch({ onSearch }: { onSearch: (query: string) => void }) {
+  const { route } = useLibrary();
+  const [value, setValue] = useState(
+    route.name === "search" ? route.query : "",
+  );
+  return (
+    <form
+      className="side-search"
+      role="search"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (value.trim()) onSearch(value.trim());
+      }}
+    >
+      <Search size={15} />
+      <input
+        id="search-input"
+        aria-label="搜尋書名或作者"
+        placeholder="搜尋書名或作者"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setValue("");
+            e.currentTarget.blur();
+          }
+        }}
+      />
+      {value && (
+        <button type="button" aria-label="清除搜尋" onClick={() => setValue("")}>
+          <X size={14} />
+        </button>
+      )}
+    </form>
+  );
+}
+
 function Sidebar() {
   const {
     library,
@@ -166,7 +209,6 @@ function Sidebar() {
   }, [library.shelf, filter, convert]);
 
   const nav = [
-    { name: "search", label: "搜尋", icon: Search, count: 0 },
     { name: "updates", label: "更新", icon: Bell, count: unread },
     { name: "bookmarks", label: "書籤", icon: BookmarkIcon, count: 0 },
     { name: "settings", label: "設定", icon: Settings2, count: 0 },
@@ -194,7 +236,23 @@ function Sidebar() {
           <PanelLeft size={18} />
         </IconButton>
       </div>
+      {expanded && (
+        <SidebarSearch
+          key={route.name === "search" ? route.query : ""}
+          onSearch={(query) => go({ name: "search", query })}
+        />
+      )}
       <nav className="side-nav" aria-label="主要導覽">
+        {!expanded && (
+          <button
+            type="button"
+            aria-label="搜尋"
+            title="搜尋"
+            onClick={() => focusSearch(setSidebarOpen)}
+          >
+            <Search size={16} />
+          </button>
+        )}
         {nav.map((n) => (
           <button
             type="button"
@@ -203,16 +261,7 @@ function Sidebar() {
             aria-current={route.name === n.name ? "page" : undefined}
             aria-label={n.label}
             title={expanded ? undefined : n.label}
-            onClick={() =>
-              go(
-                n.name === "search"
-                  ? {
-                      name: "search",
-                      query: route.name === "search" ? route.query : "",
-                    }
-                  : { name: n.name },
-              )
-            }
+            onClick={() => go({ name: n.name })}
           >
             <n.icon size={16} />
             {expanded && <span>{n.label}</span>}

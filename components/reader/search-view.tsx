@@ -10,15 +10,10 @@ import {
 import type { Work } from "@/lib/reader/works";
 import { useLibrary } from "./library-context";
 
-function SearchBox({
-  initial = "",
-  autoFocus = false,
-}: {
-  initial?: string;
-  autoFocus?: boolean;
-}) {
+/** The large box on the home page. Everywhere else, the sidebar's bar is used. */
+function SearchBox() {
   const { navigate } = useLibrary();
-  const [value, setValue] = useState(initial);
+  const [value, setValue] = useState("");
   return (
     <form
       className="search-box"
@@ -29,10 +24,8 @@ function SearchBox({
     >
       <Search size={18} />
       <input
-        id="search-input"
         aria-label="搜尋書名或作者"
         placeholder="搜尋書名或作者"
-        autoFocus={autoFocus}
         value={value}
         onChange={(e) => setValue(e.target.value)}
       />
@@ -51,7 +44,7 @@ export function HomeView() {
     .slice(0, 5);
   return (
     <div className="home">
-      <SearchBox autoFocus />
+      <SearchBox />
       {recent.length > 0 && (
         <section className="home-recent">
           <h2>繼續閱讀</h2>
@@ -102,7 +95,12 @@ export function SearchView({ query }: { query: string }) {
 
   return (
     <div className="page">
-      <SearchBox initial={query} autoFocus={!query} />
+      {!query && <p className="empty">在左邊的搜尋欄輸入書名或作者。</p>}
+      {query && (
+        <div className="page-title">
+          <h1>{convert(query)}</h1>
+        </div>
+      )}
       {query && (
         <div className="search-status" aria-live="polite">
           {searching ? (
