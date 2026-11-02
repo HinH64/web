@@ -72,6 +72,8 @@ export type Library = {
   bookmarks: Bookmark[];
   settings: Settings;
   sources: SourceId[];
+  /** Stored instead of the enabled list, so newly connected sources start on. */
+  disabledSources?: SourceId[];
 };
 export const DEFAULT_SETTINGS: Settings = {
   theme: "paper",

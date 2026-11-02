@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { REQUESTED_SOURCES } from "../lib/reader/requested-sources.ts";
+import { encodeQuery } from "../lib/reader/sources/encoding.ts";
 import { decodeBody } from "../lib/reader/sources/http.ts";
+import { fillKeys } from "../lib/reader/sources/template.ts";
 import {
   CONNECTED_SOURCE_IDS,
   SOURCES,
@@ -304,11 +306,148 @@ test("charset comes from the rule, then the header, then the page", () => {
   assert.equal(decodeBody(new TextEncoder().encode("測試"), "text/html; charset=nope"), "測試");
 });
 
+test("queries are encoded in the charset the site expects", () => {
+  assert.equal(encodeQuery("凡人", "gbk"), "%B7%B2%C8%CB");
+  assert.equal(encodeQuery("凡人", "gb2312"), "%B7%B2%C8%CB");
+  assert.equal(encodeQuery("測試", "big5"), "%B4%FA%B8%D5");
+  assert.equal(encodeQuery("凡人"), "%E5%87%A1%E4%BA%BA");
+  assert.equal(encodeQuery("a b&c", "gbk"), "a%20b%26c", "keeps ASCII safe");
+});
+
+test("keys with path separators keep them in the URL, safely", () => {
+  assert.equal(fillKeys("https://x.example/{bookKey}.html", { bookKey: "0/760" }), "https://x.example/0/760.html");
+  assert.equal(fillKeys("https://x.example/{bookKey}", { bookKey: "a b?c" }), "https://x.example/a%20b%3Fc");
+});
+
+// A site with the awkward habits seen on real ones: a GBK query, a unique match
+// answered with the book page, an http redirect, a catalog on its own page in
+// column order, no <body> tag, and a site notice inside the text.
+const awkward = {
+  ...otherSite,
+  id: "awkward",
+  hosts: ["a.example"],
+  rule: {
+    keyPattern: "^\\d+/\\d+$",
+    defaults: { author: "未註明", genre: "小說", description: "" },
+    search: {
+      url: "https://a.example/s?k={query}",
+      queryEncoding: "gbk",
+      queryScript: "cn",
+      directHit: {
+        key: { selector: "caption a", attr: "href", pattern: "/html/(\\d+/\\d+)/index" },
+        title: { selector: "h1" },
+        author: { selector: "title", pattern: ",(.+?)作品" },
+      },
+      item: "tr",
+      key: { selector: "a", attr: "href", pattern: "/info/(\\d+/\\d+)\\.html" },
+      title: { selector: "a" },
+    },
+    book: {
+      url: "https://a.example/info/{bookKey}.html",
+      title: { selector: "h1" },
+      chapters: {
+        url: "https://a.example/html/{bookKey}/index.html",
+        sortByKey: true,
+        item: "dd a",
+        key: { attr: "href", pattern: "^(\\d+)\\.html$" },
+        title: {},
+      },
+    },
+    chapter: {
+      url: "https://a.example/html/{bookKey}/{chapterKey}.html",
+      content: "html",
+      remove: "head,table,script",
+      clean: ["^請記住本站.*$"],
+    },
+  },
+};
+
+test("a unique match answered with the book page becomes one search result", async () => {
+  const bookPage = `<html><head><title>凡人,忘语作品</title></head><body><h1>凡人</h1>
+    <caption><a href="https://a.example/html/0/760/index.html">all</a></caption></body></html>`;
+  const { transport, requested } = fakeSite({
+    // 凡人 in GBK, after converting the traditional query to simplified.
+    "https://a.example/s?k=%B7%B2%C8%CB": new Response(null, {
+      status: 302,
+      headers: { location: "http://a.example/info/0/760.html" },
+    }),
+    "https://a.example/info/0/760.html": html(bookPage),
+  });
+  const service = createSourceService({ configs: [awkward], transport, sleep: noSleep });
+  const books = await service.search("awkward", "凡人");
+  assert.deepEqual(
+    books.map((b) => [b.id, b.title, b.author, b.url]),
+    [["awkward:0/760", "凡人", "忘语", "https://a.example/info/0/760.html"]],
+  );
+  assert.ok(requested.every((u) => u.startsWith("https://")), "never leaves https");
+});
+
+test("a separate catalog page, column order and a bodyless chapter all work", async () => {
+  const { transport } = fakeSite({
+    "https://a.example/info/0/760.html": html(`<html><body><h1>書</h1></body></html>`),
+    // An ajax-style fragment, with no <html>, in column rather than reading order.
+    "https://a.example/html/0/760/index.html": html(
+      `<dd><a href="30.html">第三</a></dd><dd><a href="10.html">第一</a></dd><dd><a href="20.html">第二</a></dd>`,
+    ),
+    "https://a.example/html/0/760/10.html": html(
+      `<html><head><title>x</title></head><table><tr><td>nav</td></tr></table>
+       <br> 第一 (註)<br/><br/>  請記住本站網址<br/>正文一<br/>正文二<script>bad()</script></html>`,
+    ),
+  });
+  const service = createSourceService({ configs: [awkward], transport, sleep: noSleep });
+  const book = await service.getBook("awkward:0/760");
+  assert.deepEqual(book.chapters.map((c) => c.title), ["第一", "第二", "第三"]);
+  assert.equal(book.firstChapter, "10");
+  const chapter = await service.getChapter(book.id, "10");
+  assert.deepEqual(
+    chapter.paragraphs,
+    ["正文一", "正文二"],
+    "drops the notice and the repeated title",
+  );
+  assert.equal(chapter.url, "https://a.example/html/0/760/10.html");
+});
+
+test("text can be cut from malformed pages, and a changed page fails visibly", async () => {
+  const site = {
+    ...otherSite,
+    id: "cut",
+    hosts: ["c.example"],
+    rule: {
+      ...otherSite.rule,
+      encoding: undefined,
+      keyPattern: "^\\d+$",
+      book: {
+        url: "https://c.example/b/{bookKey}",
+        title: { selector: "h1" },
+        chapters: { item: "li a", key: { attr: "href", pattern: "(\\d+)$" }, title: {} },
+      },
+      chapter: {
+        url: "https://c.example/c/{chapterKey}",
+        between: ["<!-- text -->", "<!-- end -->"],
+        content: "body",
+      },
+    },
+  };
+  const { transport } = fakeSite({
+    "https://c.example/b/1": html(`<h1>書</h1><ul><li><a href="/c/5">一</a></li><li><a href="/c/6">二</a></li></ul>`),
+    "https://c.example/c/5": html(`<div><div>nav<!-- text -->正文甲<br/>正文乙</div><!-- end --><div>foot`),
+    "https://c.example/c/6": html(`<div>redesigned page without the markers</div>`),
+  });
+  const service = createSourceService({ configs: [site], transport, sleep: noSleep });
+  assert.deepEqual((await service.getChapter("cut:1", "5")).paragraphs, ["正文甲", "正文乙"]);
+  await assert.rejects(service.getChapter("cut:1", "6"), { kind: "parse_error" });
+});
+
 test("the app's sources are exactly the requested list", () => {
   assert.equal(REQUESTED_SOURCES.length, 60);
   assert.equal(new Set(REQUESTED_SOURCES).size, 60);
   assert.deepEqual(SOURCE_CATALOG.map((s) => s.name), [...REQUESTED_SOURCES]);
-  assert.deepEqual(CONNECTED_SOURCE_IDS, ["esj"]);
+  assert.ok(CONNECTED_SOURCE_IDS.includes("esj"));
+  assert.ok(!CONNECTED_SOURCE_IDS.includes("sf"));
+  assert.ok(!CONNECTED_SOURCE_IDS.includes("ws"));
+  assert.equal(new Set(CONNECTED_SOURCE_IDS).size, CONNECTED_SOURCE_IDS.length);
+  for (const source of SOURCES)
+    assert.ok(new RegExp("^[a-z][a-z0-9-]*$").test(source.id), source.id);
   assert.equal(esj.hosts.length, 1);
   assert.equal(
     sourceChapterUrl({ id: "esj:1", source: "esj", url: "https://www.esjzone.cc/detail/1.html" }, "2"),

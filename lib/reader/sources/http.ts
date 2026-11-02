@@ -114,6 +114,8 @@ export function createHttp({
                 `來源回應 ${response.status}，請稍後重試`,
               );
             const target = new URL(location, url);
+            // Some sites redirect to their own http address; stay on https.
+            if (target.protocol === "http:") target.protocol = "https:";
             if (!isAllowed(target))
               throw new SourceError("redirect", "來源已轉址到未核准的網站");
             url = target;

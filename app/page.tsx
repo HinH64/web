@@ -1186,12 +1186,21 @@ export default function Home() {
                         aria-checked={library.sources.includes(s.id)}
                         aria-label={`啟用 ${s.name}`}
                         onClick={() =>
-                          update((l) => ({
-                            ...l,
-                            sources: l.sources.includes(s.id)
-                              ? l.sources.filter((id) => id !== s.id)
-                              : [...l.sources, s.id],
-                          }))
+                          update((l) => {
+                            const others = (l.disabledSources ?? []).filter(
+                              (id) => id !== s.id,
+                            );
+                            const disabledSources = l.sources.includes(s.id)
+                              ? [...others, s.id]
+                              : others;
+                            return {
+                              ...l,
+                              disabledSources,
+                              sources: SOURCES.map((x) => x.id).filter(
+                                (id) => !disabledSources.includes(id),
+                              ),
+                            };
+                          })
                         }
                       >
                         <i />

@@ -7,6 +7,7 @@ import {
   sanitizeSettings,
 } from "../lib/reader/reading.ts";
 import { EMPTY_LIBRARY } from "../lib/reader/types.ts";
+import { CONNECTED_SOURCE_IDS } from "../lib/reader/sources/registry.ts";
 import { sourceService } from "../lib/reader/sources/service.ts";
 
 test("update detection preserves unread chapters, ignores reordering and removed chapters", () => {
@@ -110,7 +111,13 @@ test("libraries saved before SF and Wikisource were removed still load intact", 
   assert.equal(loaded.shelf.length, 3);
   assert.equal(loaded.shelf[0].position.paragraph, 3);
   assert.equal(loaded.bookmarks.length, 1);
-  assert.deepEqual(loaded.sources, ["esj"]);
+  assert.deepEqual(loaded.sources, CONNECTED_SOURCE_IDS);
+});
+test("a disabled source stays off, and a newly connected one starts on", () => {
+  const loaded = validateLibrary({ ...EMPTY_LIBRARY, disabledSources: ["esj"] });
+  assert.ok(!loaded.sources.includes("esj"));
+  assert.equal(loaded.sources.length, CONNECTED_SOURCE_IDS.length - 1);
+  assert.deepEqual(loaded.disabledSources, ["esj"]);
 });
 test("backups cannot point a book's link at an unknown website", () => {
   assert.throws(

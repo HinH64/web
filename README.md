@@ -4,7 +4,7 @@
 
 ## 第一版
 
-- 統一書源服務：所有網站走同一套請求、解析、快取與錯誤分類；目前接通 ESJ 輕小說。
+- 統一書源服務：所有網站走同一套請求、解析、快取與錯誤分類；目前接通 7 個來源，見 [SOURCE-VALIDATION.md](SOURCE-VALIDATION.md)。
 - 依書名／作者搜尋、完整章節目錄、加入書架、連續捲動閱讀。
 - 本機閱讀位置、書籤、字級／行距／寬度／字體／繁簡設定、三種閱讀背景。
 - 手動與使用期間每 15 分鐘目錄更新檢查；檢查失敗保留上次成功結果。
@@ -36,10 +36,10 @@ npm run start -- --port 5174
 
 ## 新增書源
 
-1. 在 `web/lib/reader/sources/registry.ts` 以 `REQUESTED_SOURCES` 中的名稱新增設定：允許的網域與解析規則（URL 範本、CSS selector）。
-2. 執行 `npm run test:sources`。
+1. 在 `web/lib/reader/sources/registry.ts` 以 `REQUESTED_SOURCES` 中的名稱新增設定：允許的網域與解析規則（URL 範本、CSS selector）。可用選項見 `web/lib/reader/sources/types.ts`。
+2. 執行 `npm run test:sources`；在指令後加上書名可同時檢查各來源的重疊情況，例如 `npm run test:sources -- 凡人修仙傳`。
 
-規則無法描述的網站（例如需要 POST 搜尋或 GBK 編碼查詢字串），可寫自訂 adapter 並經 `createSourceService` 的 `adapters` 註冊。其餘程式不需修改。
+規則已支援 GBK／Big5 查詢與頁面、獨立目錄頁、唯一結果直接進入書籍頁、依章節 ID 排序、正文清理及格式錯亂頁面的文字擷取。規則無法描述的網站（例如需要 POST 搜尋），可寫自訂 adapter 並經 `createSourceService` 的 `adapters` 註冊。其餘程式不需修改。
 
 ## 程式位置
 
@@ -51,7 +51,8 @@ npm run start -- --port 5174
 | `web/lib/reader/sources/service.ts` | 統一書源服務：識別碼驗證、快取、章節歸屬檢查 |
 | `web/lib/reader/sources/registry.ts` | 已接通書源的設定與解析規則 |
 | `web/lib/reader/sources/rule-engine.ts` | 依規則執行搜尋／目錄／正文解析 |
-| `web/lib/reader/sources/http.ts` | 請求層：網域白名單、轉址、限流、編碼、錯誤分類；可替換傳輸方式 |
+| `web/lib/reader/sources/http.ts` | 請求層：網域白名單、轉址、限流、頁面解碼、錯誤分類；可替換傳輸方式 |
+| `web/lib/reader/sources/encoding.ts` | GBK／Big5 查詢字串編碼 |
 | `web/lib/reader/storage.ts` | IndexedDB、書籍／章節快取 |
 | `web/lib/reader/reading.ts` | 更新差異、段落定位與備份驗證 |
 | `web/lib/reader/requested-sources.ts` | 60 個書源名稱，即書源範圍 |

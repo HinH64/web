@@ -136,13 +136,15 @@ export function validateLibrary(data: unknown): Library {
     )
   )
     throw new Error("備份中的書籤資料不正確");
+  const disabledSources = Array.isArray(d.disabledSources)
+    ? d.disabledSources.filter((x) => typeof x === "string")
+    : [];
   return {
     version: 1,
     shelf: d.shelf.map((e) => ({ ...e, unreadIds: e.unreadIds ?? [] })),
     bookmarks: d.bookmarks,
     settings: sanitizeSettings(d.settings),
-    sources: Array.isArray(d.sources)
-      ? d.sources.filter((x) => CONNECTED_SOURCE_IDS.includes(x))
-      : [...CONNECTED_SOURCE_IDS],
+    sources: CONNECTED_SOURCE_IDS.filter((x) => !disabledSources.includes(x)),
+    disabledSources,
   };
 }

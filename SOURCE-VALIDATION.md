@@ -2,10 +2,34 @@
 
 書源範圍是 `web/lib/reader/requested-sources.ts` 的 60 個名稱。驗證一律透過 `npm run test:sources`，走與 app 相同的服務，結果只代表執行當下的環境與網路位置，不代表永久可用。
 
-| 來源 | 結果 | 已驗證範圍 |
+## 已接通（7 個）
+
+2026-11-02 以 `test:sources` 完成搜尋 → 目錄 → 正文，並在本機 Workers 執行環境及瀏覽器驗證。請求由本機網路發出，尚未在部署環境驗證。
+
+| 來源 | 網址 | 特點 |
 | --- | --- | --- |
-| ESJ 輕小說 | 已接通 | 2026-11-02：關鍵字搜尋、書籍資料、目錄、公開文字章節；抽測《雨狐小姐的日常》。連線偶有逾時，介面保留錯誤及重試入口 |
-| 其餘 59 個 | 待接通 | 尚未設定解析規則 |
+| 微風小說網 | m.wfxs.tw、www.wfxs.tw | 手機版目錄分頁，改用桌面版的完整目錄 |
+| 思兔閱讀 | sto55.com | 完整目錄在獨立的 ajax 頁；書籍頁沒有作者資料 |
+| 小說狂人 | czbooks.net | 正文夾雜站點文字，以規則清除 |
+| 黃金屋中文 | tw.hjwzw.com | 唯一結果時直接顯示書籍頁 |
+| 玫瑰言情網 | www.mgyqw.com | GBK；查詢須轉簡體；目錄按欄排列，須依章節 ID 排序 |
+| ESJ 輕小說 | www.esjzone.cc | 連線偶有逾時 |
+| 飄天文學 | www.piaotia.com | GBK；唯一結果時轉址到 http 的書籍頁；頁面沒有 body 標籤 |
+
+抽樣書名《凡人修仙傳》《鬥破蒼穹》在 5 個來源找到，《詭秘之主》《大奉打更人》《遮天》在 4 個來源找到。
+
+## 待接通（53 個）
+
+以下為 2026-11-02 由本機對每個候選網站讀取一次首頁的結果，只代表當時的網站狀態，未測試搜尋及章節。候選網址來自公開的 Legado 清單，同名網站可能不是使用者原本使用的那個。
+
+| 狀態 | 來源 |
+| --- | --- |
+| 首頁可讀，站名相符 | UU看書（www.uuread.tw）、就愛讀小說（m.95dxs.com）、福書網（www.fushuzhijia.com）、繁體小說網1（www.xiaoshuo.com.tw，搜尋回應 403）、努努書坊（www.kanunu8.com）、飯飯小說（www.ffxs8.com）、芒果書坊（www.mangguoshufang.com）、無憂書城（www.51shucheng.net）、腐小說（www.fuxsb.com）、半夏小說（www.xbanxia.cc）、天涯書庫（www.tianyabooks.com）、筆趣閣小說（www.seebook.net）、天天書吧（www.ttshu8.net）、夢遠書城（www.guxuo.com）、輕小說百科（lnovel.org）、全本小說（www.qb5.io）、52書庫（www.52shuku.net）、筆仙閣（www.bixiange.top）、大美書網（www.dameishuwang.net）、愛麗絲書屋（www.alicesw.com） |
+| 首頁可讀，須確認是否同一網站 | 輕小說文庫及神湊輕小說（皆對應 m.wowenku.com）、讀小說（www.tadu.com）、鎮魂小說（www.zhenhunxiaoshuo.com）、元小說（www.2cyread.com）、同人小說網（www.trxs.cc）、鉛筆小說（www.178xs.cc）、筆趣閣（www.wqge.cc）、101小說（novel101.com） |
+| 首頁被拒或連不到 | 69書吧、零點看書、台灣小說網、天翼文學、同人社、國學導航、宙斯小說、有度中文網 |
+| 未找到候選網址 | 櫻下書院、時空小說網、小說王耽美、捉摸書屋、虛閣上、古籍大全、微風小說網、吾要讀、青檸言情網、破萬卷小說、筆速閣、同人館、老筆趣閣、全本同人網、蜂鳥小說網、小說王 |
+
+微風小說網可能與已接通的「微風小說1」是同一網站，待確認。
 
 SF 輕小說與中文維基文庫不在書源範圍內，已移除。舊書架中這些來源的書籍與進度仍會保留，可從更新頁移出。
 

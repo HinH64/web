@@ -40,8 +40,14 @@ export type SourceRule = {
   search: {
     /** URL template using {query}. */
     url: string;
+    /** Charset the site expects the query in, such as gbk. Default utf-8. */
+    queryEncoding?: string;
+    /** Converts the query for sites that only match one script. */
+    queryScript?: "cn" | "tw";
     /** Query used to fill the browse page when the search box is empty. */
     emptyQuery?: string;
+    /** Some sites answer a unique match with the book page instead of a list. */
+    directHit?: { key: FieldRule; title: FieldRule; author?: FieldRule };
     item: string;
     key: FieldRule;
     title: FieldRule;
@@ -62,6 +68,10 @@ export type SourceRule = {
     cover?: FieldRule;
     status?: FieldRule;
     chapters: {
+      /** URL template using {bookKey}, when the catalog has its own page. */
+      url?: string;
+      /** For catalogs laid out in columns, where page order is not reading order. */
+      sortByKey?: boolean;
       item: string;
       key: FieldRule;
       title: FieldRule;
@@ -72,8 +82,15 @@ export type SourceRule = {
   chapter: {
     /** URL template using {bookKey} and {chapterKey}. */
     url: string;
+    /**
+     * Regexes marking where the text starts and ends in the raw HTML, for pages
+     * too malformed to select from. Then use "body" as the content selector.
+     */
+    between?: [string, string];
     content: string;
     remove?: string;
+    /** Regexes removed from each paragraph, for site notices inside the text. */
+    clean?: string[];
   };
 };
 

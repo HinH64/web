@@ -1,6 +1,8 @@
 import { parseHTML } from "linkedom";
 import type { Book, Chapter } from "../types.ts";
+import { encodeQuery } from "./encoding.ts";
 import { SourceError } from "./errors.ts";
+import { fillKeys } from "./template.ts";
 import type {
   AdapterFactory,
   FieldRule,
@@ -26,12 +28,28 @@ type Dom = {
 
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const fill = (template: string, vars: Vars) =>
-  template.replace(/\{(\w+)\}/g, (_, name: string) =>
-    encodeURIComponent(vars[name] ?? ""),
-  );
+/** Wrapped so that HTML fragments, such as an ajax catalog, still get a root. */
+const parse = (html: string) =>
+  parseHTML(/<html[\s>]/i.test(html) ? html : `<html><body>${html}</body></html>`)
+    .document as unknown as Dom;
 
-const parse = (html: string) => parseHTML(html).document as unknown as Dom;
+let converters: Partial<Record<"cn" | "tw", (text: string) => string>> = {};
+
+/** Loaded on demand so that sites which do not need it pay nothing for it. */
+async function convertScript(text: string, script?: "cn" | "tw") {
+  if (!script) return text;
+  if (!converters[script]) {
+    const { Converter } = await import("opencc-js");
+    converters = {
+      ...converters,
+      [script]:
+        script === "cn"
+          ? Converter({ from: "tw", to: "cn" })
+          : Converter({ from: "cn", to: "tw" }),
+    };
+  }
+  return converters[script]!(text);
+}
 
 /** Reads one value. Returns "" when the page does not have it. */
 export function readField(root: Dom, field: FieldRule, vars: Vars = {}): string {
@@ -52,7 +70,7 @@ export function readField(root: Dom, field: FieldRule, vars: Vars = {}): string 
     );
     value = value.match(new RegExp(source))?.[1] ?? "";
   }
-  if (field.strip) value = value.replace(new RegExp(field.strip), "");
+  if (field.strip) value = value.replace(new RegExp(field.strip, "g"), "");
   value = value.trim();
   return field.maxLength ? value.slice(0, field.maxLength) : value;
 }
@@ -68,16 +86,43 @@ function coverUrl(value: string, pageUrl: string) {
   }
 }
 
+const compact = (s: string) => s.replace(/\s+/g, "");
+
 /** Splits an element into paragraphs, treating block tags as line breaks. */
-export function readParagraphs(body: Dom, remove?: string) {
+export function readParagraphs(
+  body: Dom,
+  {
+    remove,
+    clean = [],
+    title,
+  }: { remove?: string; clean?: string[]; title?: string } = {},
+) {
   if (remove) for (const n of body.querySelectorAll(remove)) n.remove();
   for (const n of body.querySelectorAll("br")) n.replaceWith("\n");
   for (const n of body.querySelectorAll("p,div,li,h1,h2,h3,h4,h5,h6"))
     n.append("\n");
-  return (body.textContent ?? "")
+  const patterns = clean.map((p) => new RegExp(p, "g"));
+  const paragraphs = (body.textContent ?? "")
     .split(/\n+/)
-    .map((p) => p.trim())
+    .map((line) =>
+      patterns.reduce((text, p) => text.replace(p, ""), line.trim()).trim(),
+    )
     .filter(Boolean);
+  // Many sites repeat the chapter title as the first line; the reader shows it.
+  const heading = title ? compact(title) : "";
+  const first = paragraphs[0] ? compact(paragraphs[0]) : "";
+  if (heading && first.startsWith(heading) && first.length <= heading.length + 8)
+    paragraphs.shift();
+  return paragraphs;
+}
+
+/** The HTML between two markers, or "" so that a changed page fails visibly. */
+function sliceBetween(html: string, [start, end]: [string, string]) {
+  const from = new RegExp(start).exec(html);
+  if (!from) return "";
+  const rest = html.slice(from.index + from[0].length);
+  const to = new RegExp(end).exec(rest);
+  return to ? rest.slice(0, to.index) : "";
 }
 
 export function createRuleAdapter(
@@ -87,17 +132,41 @@ export function createRuleAdapter(
 ): SourceAdapter {
   const get = (url: string) => http.getText(url, { encoding: rule.encoding });
   const keyPattern = new RegExp(rule.keyPattern);
-  const bookUrl = (bookKey: string) => fill(rule.book.url, { bookKey });
+  const bookUrl = (bookKey: string) => fillKeys(rule.book.url, { bookKey });
 
   return {
     keyPattern,
 
     async search(query) {
-      const q = query || rule.search.emptyQuery;
-      if (!q) return [];
-      const pageUrl = fill(rule.search.url, { query: q });
-      const doc = parse(await get(pageUrl));
       const s = rule.search;
+      const text = query || s.emptyQuery;
+      if (!text) return [];
+      const encoded = encodeQuery(
+        await convertScript(text, s.queryScript),
+        s.queryEncoding,
+      );
+      const pageUrl = s.url.replaceAll("{query}", encoded);
+      const doc = parse(await get(pageUrl));
+
+      if (s.directHit) {
+        const key = readField(doc, s.directHit.key);
+        const title = readField(doc, s.directHit.title);
+        if (key && title && keyPattern.test(key))
+          return [
+            {
+              id: `${sourceId}:${key}`,
+              source: sourceId,
+              title,
+              author:
+                (s.directHit.author && readField(doc, s.directHit.author)) ||
+                rule.defaults.author,
+              genre: rule.defaults.genre,
+              description: "",
+              url: bookUrl(key),
+            },
+          ];
+      }
+
       const exclude = s.excludeTitle ? new RegExp(s.excludeTitle, "i") : null;
       const results = new Map<string, Book>();
       for (const item of doc.querySelectorAll(s.item)) {
@@ -128,10 +197,13 @@ export function createRuleAdapter(
       if (!title)
         throw new SourceError("not_found", "找不到這本書，或需要原站登入");
 
+      const catalog = b.chapters.url
+        ? parse(await get(fillKeys(b.chapters.url, { bookKey })))
+        : doc;
       const vars = { bookKey };
       const chapters: Chapter[] = [];
       const seen = new Set<string>();
-      for (const item of doc.querySelectorAll(b.chapters.item)) {
+      for (const item of catalog.querySelectorAll(b.chapters.item)) {
         const id = readField(item, b.chapters.key, vars);
         if (!id || seen.has(id)) continue;
         seen.add(id);
@@ -148,6 +220,8 @@ export function createRuleAdapter(
           "parse_error",
           "此書目錄需要原站登入或使用外部連結，暫無可讀章節",
         );
+      if (b.chapters.sortByKey)
+        chapters.sort((x, y) => Number(x.id) - Number(y.id));
 
       const status = b.status && readField(doc, b.status);
       return {
@@ -169,18 +243,25 @@ export function createRuleAdapter(
     },
 
     async getChapter(bookKey, chapter) {
-      const url = fill(rule.chapter.url, {
+      const url = fillKeys(rule.chapter.url, {
         bookKey,
         chapterKey: chapter.id,
       });
-      const doc = parse(await get(url));
+      const html = await get(url);
+      const doc = parse(
+        rule.chapter.between ? sliceBetween(html, rule.chapter.between) : html,
+      );
       const body = doc.querySelector(rule.chapter.content);
       if (!body)
         throw new SourceError(
           "login_required",
           "此章節需要原站登入或暫時無法讀取",
         );
-      const paragraphs = readParagraphs(body, rule.chapter.remove);
+      const paragraphs = readParagraphs(body, {
+        remove: rule.chapter.remove,
+        clean: rule.chapter.clean,
+        title: chapter.title,
+      });
       if (!paragraphs.length)
         throw new SourceError("parse_error", "此章節沒有可用的文字內容");
       return {
