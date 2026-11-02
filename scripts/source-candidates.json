@@ -146,14 +146,19 @@
         "title": {
           "selector": "h1.novel-title"
         },
-        "author": { "selector": ".author-name" },
+        "author": {
+          "selector": ".author-name"
+        },
         "chapters": {
           "item": ".novel-chapters a",
           "key": {
             "attr": "href",
             "pattern": "^/novels/{bookKey}/chapters/([a-z0-9]+)$"
           },
-          "title": { "selector": ".chapter-title", "strip": "^\\s*\\d+\\.\\s*" }
+          "title": {
+            "selector": ".chapter-title",
+            "strip": "^\\s*\\d+\\.\\s*"
+          }
         }
       },
       "chapter": {
@@ -210,70 +215,6 @@
       "chapter": {
         "url": "https://www.qb5.io/book/{bookKey}/{chapterKey}.html",
         "content": ".content"
-      }
-    }
-  },
-  {
-    "name": "福書網",
-    "id": "candidate-fushu",
-    "short": "福書網",
-    "logo": "?",
-    "description": "候選：僅可讀搜尋及局部分頁；目錄漏首頁和後續頁，未通過完整性驗收，不可啟用。",
-    "category": "Candidate",
-    "color": "#777777",
-    "hosts": [
-      "www.fushuzhijia.com"
-    ],
-    "homepage": "https://www.fushuzhijia.com/",
-    "probeQuery": "占為己有",
-    "rule": {
-      "keyPattern": "^\\d{1,10}$",
-      "defaults": {
-        "author": "作者未註明",
-        "genre": "小說",
-        "description": ""
-      },
-      "search": {
-        "url": "https://www.fushuzhijia.com/e/search/index.php",
-        "body": "keyboard={query}&show=title",
-        "queryScript": "cn",
-        "item": ".mipui-xs-item-list",
-        "key": {
-          "selector": ".list-title a",
-          "attr": "href",
-          "pattern": "^/book/(\\d+)\\.html$"
-        },
-        "title": {
-          "selector": ".list-title a",
-          "pattern": "^(.+?)(?:（[^）]+）)?——"
-        },
-        "author": {
-          "selector": ".info a"
-        }
-      },
-      "book": {
-        "url": "https://www.fushuzhijia.com/book/{bookKey}.html",
-        "title": {
-          "selector": ".book-top h1",
-          "pattern": "^(.+?)(?:（[^）]+）)?——"
-        },
-        "chapters": {
-          "item": ".pagination a",
-          "key": {
-            "attr": "href",
-            "pattern": "^/book/{bookKey}_(\\d+)\\.html$"
-          },
-          "title": {},
-          "sortByKey": true
-        },
-        "author": {
-          "selector": ".book-top a[href^=\"/author/\"]"
-        }
-      },
-      "chapter": {
-        "url": "https://www.fushuzhijia.com/book/{bookKey}_{chapterKey}.html",
-        "content": ".newstext",
-        "remove": "script,style,iframe"
       }
     }
   }

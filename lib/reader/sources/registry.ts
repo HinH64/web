@@ -538,6 +538,97 @@ const CONFIGS: Partial<Record<RequestedSourceName, SourceConfig>> = {
       },
     },
   },
+  福書網: {
+    id: "fushu",
+    name: "福書網",
+    short: "福書網",
+    logo: "福",
+    description: "小說文庫。支援搜尋與完整閱讀分頁目錄，依原站頁次閱讀。",
+    category: "言情 · 耽美 · 同人",
+    color: "#8e7895",
+    hosts: ["www.fushuzhijia.com"],
+    homepage: "https://www.fushuzhijia.com/",
+    probeQuery: "占為己有",
+    rule: {
+      keyPattern: "^\\d{1,10}$",
+      defaults: { author: "作者未註明", genre: "小說", description: "" },
+      search: {
+        url: "https://www.fushuzhijia.com/e/search/index.php",
+        body: "keyboard={query}&show=title",
+        queryScript: "cn",
+        item: ".mipui-xs-item-list",
+        key: { selector: ".list-title a", attr: "href", pattern: "^/book/(\\d+)\\.html$" },
+        title: { selector: ".list-title a", pattern: "^(.+?)(?:（[^）]+）)?——" },
+        author: { selector: ".info a" },
+      },
+      book: {
+        url: "https://www.fushuzhijia.com/book/{bookKey}.html",
+        title: { selector: ".book-top h1", pattern: "^(.+?)(?:（[^）]+）)?——" },
+        author: { selector: '.book-top a[href^="/author/"]' },
+        description: { selector: ".book-top .hidden-xs", maxLength: 1500 },
+        chapters: {
+          item: ".pagination .page-link",
+          key: { pattern: "^\\s*(\\d+)\\s*$" },
+          title: {},
+          sortByKey: true,
+          numberedPages: {
+            pattern: "^/book/{bookKey}_(\\d+)\\.html$",
+            current: { selector: ".pagination .active", pattern: "^\\s*(\\d+)\\s*$" },
+          },
+        },
+      },
+      chapter: {
+        url: "https://www.fushuzhijia.com/book/{bookKey}_{chapterKey}.html",
+        firstPage: { key: "1", url: "https://www.fushuzhijia.com/book/{bookKey}.html" },
+        content: ".newstext",
+        remove: "script,style,iframe,.page-control",
+      },
+    },
+  },
+  愛麗絲書屋: {
+    id: "alicesw",
+    name: "愛麗絲書屋",
+    short: "愛麗絲書屋",
+    logo: "愛",
+    description: "小說創作網站。支援搜尋、完整目錄與公開文字章節；登入內容前往原站。",
+    category: "原創 · 同人",
+    color: "#8d7fa6",
+    hosts: ["www.alicesw.com"],
+    homepage: "https://www.alicesw.com/",
+    probeQuery: "三國尋仙",
+    rule: {
+      keyPattern: "^\\d{1,10}$",
+      defaults: { author: "作者未註明", genre: "小說", description: "" },
+      search: {
+        url: "https://www.alicesw.com/search.html?q={query}&f=_all",
+        queryScript: "cn",
+        item: ".list-group-item",
+        key: { selector: "h5 a", attr: "href", pattern: "^/novel/(\\d+)\\.html$" },
+        title: { selector: "h5 a", strip: "^\\s*\\d+\\.\\s*" },
+        author: { selector: 'a[href*="f=author"]' },
+        description: { selector: ".content-txt", maxLength: 1500 },
+      },
+      book: {
+        url: "https://www.alicesw.com/novel/{bookKey}.html",
+        title: { selector: ".novel_title" },
+        author: { selector: '.novel_info a[href*="f=author"]' },
+        genre: { selector: '.novel_info a[href^="/lists/"]' },
+        description: { selector: ".jianjie", pattern: "内容简介[：:]\\s*([\\s\\S]*?)爱丽丝书屋", maxLength: 1500 },
+        chapters: {
+          url: "https://www.alicesw.com/other/chapters/id/{bookKey}.html",
+          item: ".mulu_list a",
+          key: { attr: "href", pattern: "^/book/(\\d+/[a-f0-9]+)\\.html$" },
+          title: {},
+          expectedCount: { selector: ".novel_info p", contains: "章 节", pattern: "章\\s*节[：:]\\s*(\\d+)" },
+        },
+      },
+      chapter: {
+        url: "https://www.alicesw.com/book/{chapterKey}.html",
+        content: ".read-content",
+        remove: "script,style,iframe,#user_ad",
+      },
+    },
+  },
   就愛讀小說: {
     id: "jiuaidu",
     name: "就愛讀小說",
@@ -888,7 +979,10 @@ export function sourceChapterUrl(
   book: { id: string; source: string; url: string },
   chapterId: string,
 ) {
-  const template = SOURCES.find((s) => s.id === book.source)?.rule?.chapter.url;
+  const rule = SOURCES.find((s) => s.id === book.source)?.rule?.chapter;
+  const template = rule?.firstPage?.key === chapterId
+    ? rule.firstPage.url
+    : rule?.url;
   if (!template) return book.url;
   return fillKeys(template, {
     bookKey: book.id.slice(book.source.length + 1),

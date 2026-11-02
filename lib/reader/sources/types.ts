@@ -92,6 +92,19 @@ export type SourceRule = {
       group?: { item: string; title: FieldRule };
       /** Omit image-only entries in a text reader; matches the unprefixed title. */
       excludeTitle?: string;
+      /**
+       * A text book whose catalog is a sliding window of numbered reading pages.
+       * Follows the furthest visible page until the last window, then requires
+       * every page ID from 1 to the last page. Not for paginated chapter lists.
+       */
+      numberedPages?: {
+        /** Link regex capturing the page number. May use {bookKey}. */
+        pattern: string;
+        /** Active page number, used to detect redirects or changed templates. */
+        current: FieldRule;
+      };
+      /** Declared chapter count on the book page; a mismatch fails the catalog. */
+      expectedCount?: FieldRule;
       item: string;
       key: FieldRule;
       title: FieldRule;
@@ -102,6 +115,8 @@ export type SourceRule = {
   chapter: {
     /** URL template using {bookKey} and {chapterKey}. */
     url: string;
+    /** Some numbered-page books serve page 1 at the book's unsuffixed URL. */
+    firstPage?: { key: string; url: string };
     /**
      * Regexes marking where the text starts and ends in the raw HTML, for pages
      * too malformed to select from. Then use "body" as the content selector.
