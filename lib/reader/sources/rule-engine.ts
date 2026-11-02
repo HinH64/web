@@ -88,6 +88,22 @@ function coverUrl(value: string, pageUrl: string) {
 
 const compact = (s: string) => s.replace(/\s+/g, "");
 
+function jsonValue(value: unknown, path: string): unknown {
+  for (const key of path.split(".")) {
+    if (!value || typeof value !== "object" || !Object.hasOwn(value, key))
+      return undefined;
+    value = (value as Record<string, unknown>)[key];
+  }
+  return value;
+}
+
+function jsonText(value: unknown, path?: string) {
+  const field = path ? jsonValue(value, path) : undefined;
+  return typeof field === "string" || typeof field === "number"
+    ? String(field).trim()
+    : "";
+}
+
 /** Splits an element into paragraphs, treating block tags as line breaks. */
 export function readParagraphs(
   body: Dom,
@@ -146,12 +162,41 @@ export function createRuleAdapter(
         s.queryEncoding,
       );
       const pageUrl = s.url.replaceAll("{query}", encoded);
-      const doc = parse(
-        await http.getText(pageUrl, {
-          encoding: rule.encoding,
-          ...(s.body ? { body: s.body.replaceAll("{query}", encoded) } : {}),
-        }),
-      );
+      const response = await http.getText(pageUrl, {
+        encoding: rule.encoding,
+        ...(s.body ? { body: s.body.replaceAll("{query}", encoded) } : {}),
+      });
+      if (s.json) {
+        let data: unknown;
+        try {
+          data = JSON.parse(response);
+        } catch {
+          throw new SourceError("parse_error", "書源的搜尋資料格式已變更");
+        }
+        const items = s.json.items ? jsonValue(data, s.json.items) : data;
+        if (!Array.isArray(items))
+          throw new SourceError("parse_error", "書源的搜尋資料格式已變更");
+        const results = new Map<string, Book>();
+        const exclude = s.excludeTitle ? new RegExp(s.excludeTitle, "i") : null;
+        for (const item of items) {
+          const key = jsonText(item, s.json.key);
+          const title = jsonText(item, s.json.title);
+          if (!key || !title || !keyPattern.test(key) || exclude?.test(title))
+            continue;
+          results.set(key, {
+            id: `${sourceId}:${key}`,
+            source: sourceId,
+            title,
+            author: jsonText(item, s.json.author) || rule.defaults.author,
+            genre: jsonText(item, s.json.genre) || rule.defaults.genre,
+            description: jsonText(item, s.json.description).slice(0, 1500),
+            cover: coverUrl(jsonText(item, s.json.cover), pageUrl),
+            url: bookUrl(key),
+          });
+        }
+        return [...results.values()].slice(0, s.limit ?? 20);
+      }
+      const doc = parse(response);
 
       if (s.directHit) {
         const key = readField(doc, s.directHit.key);
@@ -208,17 +253,28 @@ export function createRuleAdapter(
       const vars = { bookKey };
       const chapters: Chapter[] = [];
       const seen = new Set<string>();
-      for (const item of catalog.querySelectorAll(b.chapters.item)) {
-        const id = readField(item, b.chapters.key, vars);
-        if (!id || seen.has(id)) continue;
-        seen.add(id);
-        const chapter: Chapter = {
-          id,
-          title: readField(item, b.chapters.title) || "章節",
-        };
-        if (b.chapters.locked && item.querySelector(b.chapters.locked))
-          chapter.locked = true;
-        chapters.push(chapter);
+      const groups = b.chapters.group
+        ? catalog.querySelectorAll(b.chapters.group.item)
+        : [catalog];
+      const exclude = b.chapters.excludeTitle ? new RegExp(b.chapters.excludeTitle) : null;
+      for (const group of groups) {
+        const prefix = b.chapters.group && readField(group, b.chapters.group.title);
+        if (b.chapters.group && !prefix)
+          throw new SourceError("parse_error", "此書的分卷目錄格式已變更");
+        for (const item of group.querySelectorAll(b.chapters.item)) {
+          const id = readField(item, b.chapters.key, vars);
+          if (!id || seen.has(id)) continue;
+          const title = readField(item, b.chapters.title) || "章節";
+          if (exclude?.test(title)) continue;
+          seen.add(id);
+          const chapter: Chapter = {
+            id,
+            title: prefix ? `${prefix} · ${title}` : title,
+          };
+          if (b.chapters.locked && item.querySelector(b.chapters.locked))
+            chapter.locked = true;
+          chapters.push(chapter);
+        }
       }
       if (!chapters.length)
         throw new SourceError(

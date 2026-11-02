@@ -48,6 +48,22 @@ export type SourceRule = {
     queryScript?: "cn" | "tw";
     /** Query used to fill the browse page when the search box is empty. */
     emptyQuery?: string;
+    excludeTitle?: string;
+    limit?: number;
+  } & ({
+    /** Public JSON search results. Dotted paths read data, never code. */
+    json: {
+      /** Omit when the response itself is an array. */
+      items?: string;
+      key: string;
+      title: string;
+      author?: string;
+      genre?: string;
+      description?: string;
+      cover?: string;
+    };
+  } | {
+    json?: undefined;
     /** Some sites answer a unique match with the book page instead of a list. */
     directHit?: { key: FieldRule; title: FieldRule; author?: FieldRule };
     item: string;
@@ -57,9 +73,7 @@ export type SourceRule = {
     genre?: FieldRule;
     description?: FieldRule;
     cover?: FieldRule;
-    excludeTitle?: string;
-    limit?: number;
-  };
+  });
   book: {
     /** URL template using {bookKey}. */
     url: string;
@@ -74,6 +88,10 @@ export type SourceRule = {
       url?: string;
       /** For catalogs laid out in columns, where page order is not reading order. */
       sortByKey?: boolean;
+      /** Prefix chapter titles with their containing volume's title. */
+      group?: { item: string; title: FieldRule };
+      /** Omit image-only entries in a text reader; matches the unprefixed title. */
+      excludeTitle?: string;
       item: string;
       key: FieldRule;
       title: FieldRule;

@@ -613,6 +613,113 @@ test("a site with endless page links stops after a fixed number of pages", async
   assert.equal(calls, 10);
 });
 
+test("public JSON search reads data paths, validates identity and deduplicates results", async () => {
+  const config = {
+    ...esj, id: "json", hosts: ["j.example"],
+    rule: {
+      ...esj.rule,
+      search: {
+        url: "https://j.example/s?q={query}",
+        json: { items: "results", key: "id", title: "name", author: "authors.0.name", cover: "cover" },
+        excludeTitle: "excluded",
+      },
+      book: { ...esj.rule.book, url: "https://j.example/books/{bookKey}" },
+    },
+  };
+  const service = createSourceService({
+    configs: [config], sleep: noSleep,
+    transport: async () => html(JSON.stringify({ results: [
+      { id: 7, name: "舊標題" },
+      { id: "../bad", name: "無效 ID" },
+      { id: 8, name: { unsafe: "object" } },
+      { id: 9, name: "excluded" },
+      { id: 7, name: " 雲城 ", authors: [{ name: "小林" }], cover: "/cover.png" },
+      { id: 10, name: "海城", cover: "javascript:bad()" },
+    ] })),
+  });
+  const books = await service.search("json", "城");
+  assert.deepEqual(books.map((b) => [b.id, b.title, b.author]), [
+    ["json:7", "雲城", "小林"], ["json:10", "海城", esj.rule.defaults.author],
+  ]);
+  assert.equal(books[0].url, "https://j.example/books/7");
+  assert.equal(books[0].cover, "https://j.example/cover.png");
+  assert.equal(books[1].cover, undefined);
+});
+
+test("JSON array search is explicit, and malformed responses fail visibly", async () => {
+  const config = {
+    ...esj, id: "json", hosts: ["j.example"],
+    rule: { ...esj.rule, search: {
+      url: "https://j.example/s?q={query}",
+      json: { key: "id", title: "name" }, limit: 1,
+    } },
+  };
+  let response = '[{"id":1,"name":"雲城"},{"id":2,"name":"海城"}]';
+  const service = createSourceService({ configs: [config], sleep: noSleep, transport: async () => html(response) });
+  assert.equal((await service.search("json", "one")).length, 1);
+  for (const value of ['{"not":"an array"}', '<html>login</html>', 'null']) {
+    response = value;
+    await assert.rejects(service.search("json", value), { kind: "parse_error" });
+  }
+});
+
+test("volume catalogs preserve site order, distinguish repeated titles and skip only image entries", async () => {
+  const config = {
+    ...esj, id: "volumes", hosts: ["v.example"],
+    rule: {
+      ...esj.rule,
+      book: {
+        url: "https://v.example/b/{bookKey}", title: { selector: "h1" },
+        chapters: {
+          group: { item: ".volume", title: { selector: "h2" } },
+          item: "li a", key: { attr: "href", pattern: "^/c/(\\d+)$" }, title: {},
+          excludeTitle: "^插画$",
+        },
+      },
+      chapter: { url: "https://v.example/c/{chapterKey}", content: "article" },
+    },
+  };
+  const { transport } = fakeSite({
+    "https://v.example/b/1": html(`<h1>雲城</h1>
+      <section class="volume"><h2>第一卷</h2><ul><li><a href="/c/90">序幕</a></li>
+      <li><a href="/c/91">插画</a></li><li><a href="/c/92">後記</a></li></ul></section>
+      <section class="volume"><h2>第二卷</h2><ul><li><a href="/c/20">序幕</a></li>
+      <li><a href="/c/20">重複</a></li></ul></section>`),
+    "https://v.example/b/2": html(`<h1>雲城</h1><section class="volume"><a href="/c/1">章節</a></section>`),
+    "https://v.example/c/90": html(`<article>小林走進城門。</article>`),
+  });
+  const service = createSourceService({ configs: [config], transport, sleep: noSleep });
+  const book = await service.getBook("volumes:1");
+  assert.deepEqual(book.chapters.map((c) => [c.id, c.title]), [
+    ["90", "第一卷 · 序幕"], ["92", "第一卷 · 後記"], ["20", "第二卷 · 序幕"],
+  ]);
+  assert.deepEqual((await service.getChapter(book.id, "90")).paragraphs, ["小林走進城門。"]);
+  await assert.rejects(service.getBook("volumes:2"), { kind: "parse_error" });
+});
+
+test("seebook reads its complete catalog and joins only pages of the same chapter", async () => {
+  const { transport, requested } = fakeSite({
+    "https://www.seebook.net/0_42/": html(`
+      <meta property="og:novel:book_name" content="雲城"><meta property="og:novel:author" content="小林">
+      <div class="container"><div class="info-chapters"><a href="/book/42/20.html">最新章</a></div></div>
+      <div class="container mb20"><div class="info-chapters">
+      <a href="/book/42/10.html">第一章</a><a href="/book/42/20.html">第二章</a></div></div>`),
+    "https://www.seebook.net/book/42/10.html": html(`
+      <article id="article"><p>，最快更新雲城最新章节！</p><p>小林出發了。</p></article>
+      <a href="/book/42/10_2.html">下一页</a><a href="/book/42/20.html">下一章</a>`),
+    "https://www.seebook.net/book/42/10_2.html": html(`
+      <article id="article"><p>她帶著地圖。</p><p>作者的話：明天繼續。</p></article>
+      <a href="/book/42/10_1.html">上一页</a><a href="/book/42/20.html">下一章</a>`),
+  });
+  const service = createSourceService({ transport, sleep: noSleep });
+  const book = await service.getBook("seebook:0_42");
+  assert.deepEqual(book.chapters.map((c) => c.id), ["42/10", "42/20"]);
+  const chapter = await service.getChapter(book.id, book.firstChapter);
+  assert.deepEqual(chapter.paragraphs, ["小林出發了。", "她帶著地圖。", "作者的話：明天繼續。"]);
+  assert.equal(sourceChapterUrl(book, "42/10"), "https://www.seebook.net/book/42/10.html");
+  assert.ok(!requested.some((u) => /\/20\.html|_1\.html/.test(u)));
+});
+
 test("the app's sources are exactly the requested list", () => {
   assert.equal(REQUESTED_SOURCES.length, 60);
   assert.equal(new Set(REQUESTED_SOURCES).size, 60);

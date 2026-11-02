@@ -1,0 +1,280 @@
+[
+  {
+    "name": "天天書吧",
+    "id": "candidate-ttshu",
+    "short": "天天書吧",
+    "logo": "?",
+    "description": "候選：搜尋回應 500，未接通。",
+    "category": "Candidate",
+    "color": "#777777",
+    "hosts": [
+      "www.ttshu8.net"
+    ],
+    "homepage": "https://www.ttshu8.net/",
+    "probeQuery": "凡人修仙傳",
+    "rule": {
+      "keyPattern": "^\\d{1,10}$",
+      "defaults": {
+        "author": "作者未註明",
+        "genre": "小說",
+        "description": ""
+      },
+      "search": {
+        "url": "https://www.ttshu8.net/search.html",
+        "body": "searchkey={query}&searchtype=all&Submit=",
+        "queryScript": "cn",
+        "item": ".book",
+        "key": {
+          "selector": "a",
+          "attr": "href",
+          "pattern": "/info/(\\d+)\\.html"
+        },
+        "title": {
+          "selector": "a"
+        }
+      },
+      "book": {
+        "url": "https://www.ttshu8.net/book/{bookKey}.html",
+        "title": {
+          "selector": "h1"
+        },
+        "chapters": {
+          "item": ".chapter-list a",
+          "key": {
+            "attr": "href",
+            "pattern": "/(\\d+)\\.html$"
+          },
+          "title": {}
+        }
+      },
+      "chapter": {
+        "url": "https://www.ttshu8.net/book/{bookKey}/{chapterKey}.html",
+        "content": ".content"
+      }
+    }
+  },
+  {
+    "name": "神湊輕小說",
+    "id": "candidate-shencou",
+    "short": "神湊輕小說",
+    "logo": "?",
+    "description": "候選：搜尋被拒，未接通，不嘗試繞過。",
+    "category": "Candidate",
+    "color": "#777777",
+    "hosts": [
+      "m.wowenku.com"
+    ],
+    "homepage": "https://m.wowenku.com/",
+    "probeQuery": "凡人修仙傳",
+    "rule": {
+      "keyPattern": "^\\d{1,10}$",
+      "defaults": {
+        "author": "作者未註明",
+        "genre": "小說",
+        "description": ""
+      },
+      "search": {
+        "url": "https://m.wowenku.com/pserchs.php",
+        "body": "s={query}&q=0&type=articlename",
+        "queryScript": "cn",
+        "queryEncoding": "gbk",
+        "item": ".book",
+        "key": {
+          "selector": "a",
+          "attr": "href",
+          "pattern": "aid=(\\d+)"
+        },
+        "title": {
+          "selector": "a"
+        }
+      },
+      "book": {
+        "url": "https://m.wowenku.com/book/{bookKey}.html",
+        "title": {
+          "selector": "h1"
+        },
+        "chapters": {
+          "item": ".chapter-list a",
+          "key": {
+            "attr": "href",
+            "pattern": "/(\\d+)\\.html$"
+          },
+          "title": {}
+        }
+      },
+      "chapter": {
+        "url": "https://m.wowenku.com/book/{bookKey}/{chapterKey}.html",
+        "content": ".content"
+      }
+    }
+  },
+  {
+    "name": "101小說",
+    "id": "candidate-novel101",
+    "short": "101小說",
+    "logo": "?",
+    "description": "候選：搜尋回應 500，未接通。",
+    "category": "Candidate",
+    "color": "#777777",
+    "hosts": [
+      "novel101.com"
+    ],
+    "homepage": "https://novel101.com/",
+    "probeQuery": "凡人修仙傳",
+    "rule": {
+      "keyPattern": "^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$",
+      "defaults": {
+        "author": "作者未註明",
+        "genre": "小說",
+        "description": ""
+      },
+      "search": {
+        "url": "https://novel101.com/novels/search?utf8=%E2%9C%93&q%5Btitle_or_author_cont%5D={query}&format=html",
+        "queryScript": "tw",
+        "item": ".novel",
+        "key": {
+          "selector": "a",
+          "attr": "href",
+          "pattern": "/novels/([a-z0-9-]+)"
+        },
+        "title": {
+          "selector": "a"
+        }
+      },
+      "book": {
+        "url": "https://novel101.com/novels/{bookKey}?format=html",
+        "title": {
+          "selector": "h1.novel-title"
+        },
+        "author": { "selector": ".author-name" },
+        "chapters": {
+          "item": ".novel-chapters a",
+          "key": {
+            "attr": "href",
+            "pattern": "^/novels/{bookKey}/chapters/([a-z0-9]+)$"
+          },
+          "title": { "selector": ".chapter-title", "strip": "^\\s*\\d+\\.\\s*" }
+        }
+      },
+      "chapter": {
+        "url": "https://novel101.com/novels/{bookKey}/chapters/{chapterKey}?format=html",
+        "content": ".novel-container .body",
+        "remove": "script,style,iframe"
+      }
+    }
+  },
+  {
+    "name": "全本小說",
+    "id": "candidate-qb5",
+    "short": "全本小說",
+    "logo": "?",
+    "description": "候選：搜尋回應空白，未接通。",
+    "category": "Candidate",
+    "color": "#777777",
+    "hosts": [
+      "www.qb5.io"
+    ],
+    "homepage": "https://www.qb5.io/",
+    "probeQuery": "凡人修仙傳",
+    "rule": {
+      "keyPattern": "^\\d{1,10}$",
+      "defaults": {
+        "author": "作者未註明",
+        "genre": "小說",
+        "description": ""
+      },
+      "search": {
+        "url": "https://www.qb5.io/?c=xs&a=sou&q={query}",
+        "queryScript": "cn",
+        "item": "a[href*=\"/n/\"]",
+        "key": {
+          "attr": "href",
+          "pattern": "/n/([^/]+)/"
+        },
+        "title": {}
+      },
+      "book": {
+        "url": "https://www.qb5.io/book/{bookKey}.html",
+        "title": {
+          "selector": "h1"
+        },
+        "chapters": {
+          "item": ".chapter-list a",
+          "key": {
+            "attr": "href",
+            "pattern": "/(\\d+)\\.html$"
+          },
+          "title": {}
+        }
+      },
+      "chapter": {
+        "url": "https://www.qb5.io/book/{bookKey}/{chapterKey}.html",
+        "content": ".content"
+      }
+    }
+  },
+  {
+    "name": "福書網",
+    "id": "candidate-fushu",
+    "short": "福書網",
+    "logo": "?",
+    "description": "候選：僅可讀搜尋及局部分頁；目錄漏首頁和後續頁，未通過完整性驗收，不可啟用。",
+    "category": "Candidate",
+    "color": "#777777",
+    "hosts": [
+      "www.fushuzhijia.com"
+    ],
+    "homepage": "https://www.fushuzhijia.com/",
+    "probeQuery": "占為己有",
+    "rule": {
+      "keyPattern": "^\\d{1,10}$",
+      "defaults": {
+        "author": "作者未註明",
+        "genre": "小說",
+        "description": ""
+      },
+      "search": {
+        "url": "https://www.fushuzhijia.com/e/search/index.php",
+        "body": "keyboard={query}&show=title",
+        "queryScript": "cn",
+        "item": ".mipui-xs-item-list",
+        "key": {
+          "selector": ".list-title a",
+          "attr": "href",
+          "pattern": "^/book/(\\d+)\\.html$"
+        },
+        "title": {
+          "selector": ".list-title a",
+          "pattern": "^(.+?)(?:（[^）]+）)?——"
+        },
+        "author": {
+          "selector": ".info a"
+        }
+      },
+      "book": {
+        "url": "https://www.fushuzhijia.com/book/{bookKey}.html",
+        "title": {
+          "selector": ".book-top h1",
+          "pattern": "^(.+?)(?:（[^）]+）)?——"
+        },
+        "chapters": {
+          "item": ".pagination a",
+          "key": {
+            "attr": "href",
+            "pattern": "^/book/{bookKey}_(\\d+)\\.html$"
+          },
+          "title": {},
+          "sortByKey": true
+        },
+        "author": {
+          "selector": ".book-top a[href^=\"/author/\"]"
+        }
+      },
+      "chapter": {
+        "url": "https://www.fushuzhijia.com/book/{bookKey}_{chapterKey}.html",
+        "content": ".newstext",
+        "remove": "script,style,iframe"
+      }
+    }
+  }
+]
