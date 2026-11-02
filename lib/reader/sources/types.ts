@@ -40,6 +40,8 @@ export type SourceRule = {
   search: {
     /** URL template using {query}. */
     url: string;
+    /** Form body using {query}. When set, the search is sent as a POST. */
+    body?: string;
     /** Charset the site expects the query in, such as gbk. Default utf-8. */
     queryEncoding?: string;
     /** Converts the query for sites that only match one script. */
@@ -87,6 +89,11 @@ export type SourceRule = {
      * too malformed to select from. Then use "body" as the content selector.
      */
     between?: [string, string];
+    /**
+     * Regex for links to other pages of the same chapter, capturing the page
+     * number. Later pages are read and joined. May use {bookKey} and {chapterKey}.
+     */
+    pagePattern?: string;
     content: string;
     remove?: string;
     /** Regexes removed from each paragraph, for site notices inside the text. */
@@ -120,8 +127,14 @@ export type SourceAdapter = {
   getChapter(bookKey: string, chapter: Chapter): Promise<ChapterContent>;
 };
 
+export type RequestOptions = {
+  encoding?: string;
+  /** Form body, already encoded. When set, the request is sent as a POST. */
+  body?: string;
+};
+
 export type SourceHttp = {
-  getText(url: string, options?: { encoding?: string }): Promise<string>;
+  getText(url: string, options?: RequestOptions): Promise<string>;
 };
 
 export type AdapterFactory = (context: {

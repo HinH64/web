@@ -4,7 +4,7 @@
 
 ## 第一版
 
-- 統一書源服務：所有網站走同一套請求、解析、快取與錯誤分類；目前接通 7 個來源，見 [SOURCE-VALIDATION.md](SOURCE-VALIDATION.md)。
+- 統一書源服務：所有網站走同一套請求、解析、快取與錯誤分類；目前接通 12 個來源，見 [SOURCE-VALIDATION.md](SOURCE-VALIDATION.md)。
 - 依書名／作者搜尋、完整章節目錄、加入書架、連續捲動閱讀。
 - 本機閱讀位置、書籤、字級／行距／寬度／字體／繁簡設定、三種閱讀背景。
 - 手動與使用期間每 15 分鐘目錄更新檢查；檢查失敗保留上次成功結果。
@@ -41,7 +41,7 @@ npm run lint
 1. 在 `web/lib/reader/sources/registry.ts` 以 `REQUESTED_SOURCES` 中的名稱新增設定：允許的網域與解析規則（URL 範本、CSS selector）。可用選項見 `web/lib/reader/sources/types.ts`。
 2. 執行 `npm run test:sources`；在指令後加上書名可同時檢查各來源的重疊情況，例如 `npm run test:sources -- 凡人修仙傳`。
 
-規則已支援 GBK／Big5 查詢與頁面、獨立目錄頁、唯一結果直接進入書籍頁、依章節 ID 排序、正文清理及格式錯亂頁面的文字擷取。規則無法描述的網站（例如需要 POST 搜尋），可寫自訂 adapter 並經 `createSourceService` 的 `adapters` 註冊。其餘程式不需修改。
+規則已支援 POST 搜尋、GBK／Big5 查詢與頁面、獨立目錄頁、一章多頁、唯一結果直接進入書籍頁、依章節 ID 排序、正文清理及格式錯亂頁面的文字擷取。規則無法描述的網站，可寫自訂 adapter 並經 `createSourceService` 的 `adapters` 註冊。其餘程式不需修改。
 
 ## 程式位置
 

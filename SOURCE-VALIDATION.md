@@ -2,7 +2,7 @@
 
 書源範圍是 `web/lib/reader/requested-sources.ts` 的 60 個名稱。驗證一律透過 `npm run test:sources`，走與 app 相同的服務，結果只代表執行當下的環境與網路位置，不代表永久可用。
 
-## 已接通（7 個）
+## 已接通（12 個）
 
 2026-11-02 以 `test:sources` 完成搜尋 → 目錄 → 正文，並在正式建置及瀏覽器驗證。請求由本機網路發出；若日後部署到雲端，來源可能因數據中心 IP 而有不同結果，須重新驗證。
 
@@ -15,16 +15,24 @@
 | 玫瑰言情網 | www.mgyqw.com | GBK；查詢須轉簡體；目錄按欄排列，須依章節 ID 排序 |
 | ESJ 輕小說 | www.esjzone.cc | 連線偶有逾時 |
 | 飄天文學 | www.piaotia.com | GBK；唯一結果時轉址到 http 的書籍頁；頁面沒有 body 標籤 |
+| UU看書 | www.uuread.tw | POST 搜尋；一章分多頁 |
+| 無憂書城 | www.51shucheng.net | 書籍 ID 含分類路徑；查詢須轉簡體 |
+| 半夏小說 | www.xbanxia.cc | POST 搜尋 |
+| 筆仙閣 | www.bixiange.top | POST 搜尋（GBK）；查詢須轉簡體；目錄以「節」分段 |
+| 大美書網 | www.dameishuwang.net | POST 搜尋（GBK）；查詢須轉簡體；一章分多頁 |
 
-抽樣書名《凡人修仙傳》《鬥破蒼穹》在 5 個來源找到，《詭秘之主》《大奉打更人》《遮天》在 4 個來源找到。
+抽樣書名以完全相同的書名計算（同名不一定是同一版本）：《鬥破蒼穹》《凡人修仙傳》《大奉打更人》各在 7 個來源找到，《天官賜福》在 4 個來源，《三體》在 3 個來源。
 
-## 待接通（53 個）
+## 待接通（48 個）
 
-以下為 2026-11-02 由本機對每個候選網站讀取一次首頁的結果，只代表當時的網站狀態，未測試搜尋及章節。候選網址來自公開的 Legado 清單，同名網站可能不是使用者原本使用的那個。
+以下為 2026-11-02 由本機測試的結果，只代表當時的網站狀態。候選網址來自公開的 Legado 清單，同名網站可能不是使用者原本使用的那個。
 
 | 狀態 | 來源 |
 | --- | --- |
-| 首頁可讀，站名相符 | UU看書（www.uuread.tw）、就愛讀小說（m.95dxs.com）、福書網（www.fushuzhijia.com）、繁體小說網1（www.xiaoshuo.com.tw，搜尋回應 403）、努努書坊（www.kanunu8.com）、飯飯小說（www.ffxs8.com）、芒果書坊（www.mangguoshufang.com）、無憂書城（www.51shucheng.net）、腐小說（www.fuxsb.com）、半夏小說（www.xbanxia.cc）、天涯書庫（www.tianyabooks.com）、筆趣閣小說（www.seebook.net）、天天書吧（www.ttshu8.net）、夢遠書城（www.guxuo.com）、輕小說百科（lnovel.org）、全本小說（www.qb5.io）、52書庫（www.52shuku.net）、筆仙閣（www.bixiange.top）、大美書網（www.dameishuwang.net）、愛麗絲書屋（www.alicesw.com） |
+| 搜尋遭拒（403），不嘗試繞過 | 繁體小說網1（www.xiaoshuo.com.tw）、芒果書坊（www.mangguoshufang.com）、腐小說（www.fuxsb.com） |
+| 首頁沒有搜尋功能，無法按書名找書 | 努努書坊（www.kanunu8.com）、天涯書庫（www.tianyabooks.com）、筆趣閣小說（www.seebook.net）、夢遠書城（www.guxuo.com） |
+| 搜尋未成功，待查 | 就愛讀小說（m.95dxs.com，404）、福書網（www.fushuzhijia.com，沒有結果）、飯飯小說（www.ffxs8.com，回應提示頁）、天天書吧（www.ttshu8.net，500）、輕小說百科（lnovel.org）、全本小說（www.qb5.io，正文由 ajax 載入） |
+| 搜尋有回應，規則待完成 | 52書庫（www.52shuku.net）、愛麗絲書屋（www.alicesw.com） |
 | 首頁可讀，須確認是否同一網站 | 輕小說文庫及神湊輕小說（皆對應 m.wowenku.com）、讀小說（www.tadu.com）、鎮魂小說（www.zhenhunxiaoshuo.com）、元小說（www.2cyread.com）、同人小說網（www.trxs.cc）、鉛筆小說（www.178xs.cc）、筆趣閣（www.wqge.cc）、101小說（novel101.com） |
 | 首頁被拒或連不到 | 69書吧、零點看書、台灣小說網、天翼文學、同人社、國學導航、宙斯小說、有度中文網 |
 | 未找到候選網址 | 櫻下書院、時空小說網、小說王耽美、捉摸書屋、虛閣上、古籍大全、微風小說網、吾要讀、青檸言情網、破萬卷小說、筆速閣、同人館、老筆趣閣、全本同人網、蜂鳥小說網、小說王 |

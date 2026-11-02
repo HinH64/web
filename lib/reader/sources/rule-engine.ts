@@ -7,6 +7,7 @@ import type {
   AdapterFactory,
   FieldRule,
   SourceAdapter,
+  SourceHttp,
   SourceRule,
 } from "./types.ts";
 
@@ -22,6 +23,8 @@ type Dom = {
   replaceWith(text: string): void;
   append(text: string): void;
 };
+
+const MAX_CHAPTER_PAGES = 10;
 
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -125,7 +128,7 @@ function sliceBetween(html: string, [start, end]: [string, string]) {
 export function createRuleAdapter(
   sourceId: string,
   rule: SourceRule,
-  http: { getText: (url: string, o?: { encoding?: string }) => Promise<string> },
+  http: SourceHttp,
 ): SourceAdapter {
   const get = (url: string) => http.getText(url, { encoding: rule.encoding });
   const keyPattern = new RegExp(rule.keyPattern);
@@ -143,7 +146,12 @@ export function createRuleAdapter(
         s.queryEncoding,
       );
       const pageUrl = s.url.replaceAll("{query}", encoded);
-      const doc = parse(await get(pageUrl));
+      const doc = parse(
+        await http.getText(pageUrl, {
+          encoding: rule.encoding,
+          ...(s.body ? { body: s.body.replaceAll("{query}", encoded) } : {}),
+        }),
+      );
 
       if (s.directHit) {
         const key = readField(doc, s.directHit.key);
@@ -244,21 +252,55 @@ export function createRuleAdapter(
         bookKey,
         chapterKey: chapter.id,
       });
-      const html = await get(url);
-      const doc = parse(
-        rule.chapter.between ? sliceBetween(html, rule.chapter.between) : html,
-      );
-      const body = doc.querySelector(rule.chapter.content);
-      if (!body)
-        throw new SourceError(
-          "login_required",
-          "此章節需要原站登入或暫時無法讀取",
+      const nextPage = rule.chapter.pagePattern
+        ? new RegExp(
+            rule.chapter.pagePattern.replace(/\{(\w+)\}/g, (_, name: string) =>
+              escapeRegex(name === "bookKey" ? bookKey : chapter.id),
+            ),
+          )
+        : null;
+      const paragraphs: string[] = [];
+      let pageNumber = 1;
+      let pagesRead = 0;
+      let pageUrl: string | undefined = url;
+      while (pageUrl) {
+        pagesRead++;
+        const html = await get(pageUrl);
+        const doc = parse(
+          rule.chapter.between
+            ? sliceBetween(html, rule.chapter.between)
+            : html,
         );
-      const paragraphs = readParagraphs(body, {
-        remove: rule.chapter.remove,
-        clean: rule.chapter.clean,
-        title: chapter.title,
-      });
+        const body = doc.querySelector(rule.chapter.content);
+        // A missing later page throws too: half a chapter must not look whole.
+        if (!body)
+          throw new SourceError(
+            "login_required",
+            "此章節需要原站登入或暫時無法讀取",
+          );
+        // Only the lowest higher page number: a "previous page" link can match
+        // the same pattern, and following it would repeat the text.
+        let following: string | undefined;
+        let followingNumber = Infinity;
+        if (nextPage && pagesRead < MAX_CHAPTER_PAGES)
+          for (const link of doc.querySelectorAll("a[href]")) {
+            const href = link.getAttribute("href") ?? "";
+            const number = Number(nextPage.exec(href)?.[1]);
+            if (number > pageNumber && number < followingNumber) {
+              following = new URL(href, pageUrl).href;
+              followingNumber = number;
+            }
+          }
+        paragraphs.push(
+          ...readParagraphs(body, {
+            remove: rule.chapter.remove,
+            clean: rule.chapter.clean,
+            title: chapter.title,
+          }),
+        );
+        pageNumber = followingNumber;
+        pageUrl = following;
+      }
       if (!paragraphs.length)
         throw new SourceError("parse_error", "此章節沒有可用的文字內容");
       return {

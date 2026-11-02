@@ -86,6 +86,8 @@ export function createHttp({
         if (!isAllowed(url))
           throw new SourceError("invalid_request", "不支援的來源網址");
 
+        // A redirect after a POST is followed with a GET, as browsers do.
+        let body = options.body;
         for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
           await waitTurn(url.hostname, interval);
           let response: Response;
@@ -96,7 +98,11 @@ export function createHttp({
               headers: {
                 "User-Agent": USER_AGENT,
                 Accept: "application/json,text/html",
+                ...(body
+                  ? { "Content-Type": "application/x-www-form-urlencoded" }
+                  : {}),
               },
+              ...(body ? { method: "POST", body } : {}),
             });
           } catch (error) {
             if ((error as Error)?.name === "TimeoutError")
@@ -119,6 +125,7 @@ export function createHttp({
             if (!isAllowed(target))
               throw new SourceError("redirect", "來源已轉址到未核准的網站");
             url = target;
+            body = undefined;
             continue;
           }
           if (!response.ok) {

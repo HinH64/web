@@ -438,6 +438,106 @@ test("text can be cut from malformed pages, and a changed page fails visibly", a
   await assert.rejects(service.getChapter("cut:1", "6"), { kind: "parse_error" });
 });
 
+test("a POST search sends the encoded form, and its redirect is followed with a GET", async () => {
+  const seen = [];
+  const site = {
+    ...awkward,
+    id: "poster",
+    hosts: ["p.example"],
+    rule: {
+      ...awkward.rule,
+      keyPattern: "^\\d+$",
+      search: {
+        url: "https://p.example/s",
+        body: "searchkey={query}&type=all",
+        queryEncoding: "gbk",
+        item: "li",
+        key: { selector: "a", attr: "href", pattern: "/b/(\\d+)" },
+        title: { selector: "a" },
+      },
+    },
+  };
+  const service = createSourceService({
+    configs: [site],
+    sleep: noSleep,
+    transport: async (url, init) => {
+      seen.push([url.pathname, init.method ?? "GET", init.body ?? null, init.headers["Content-Type"] ?? null]);
+      return url.pathname === "/s"
+        ? new Response(null, { status: 302, headers: { location: "/list" } })
+        : html(`<li><a href="/b/7">書</a></li>`);
+    },
+  });
+  assert.deepEqual((await service.search("poster", "凡人")).map((b) => b.id), ["poster:7"]);
+  assert.deepEqual(seen, [
+    ["/s", "POST", "searchkey=%B7%B2%C8%CB&type=all", "application/x-www-form-urlencoded"],
+    ["/list", "GET", null, null],
+  ]);
+});
+
+const paged = {
+  ...awkward,
+  id: "paged",
+  hosts: ["g.example"],
+  rule: {
+    ...awkward.rule,
+    keyPattern: "^\\d+$",
+    book: {
+      url: "https://g.example/b/{bookKey}",
+      title: { selector: "h1" },
+      chapters: { item: "li a", key: { attr: "href", pattern: "/c/(\\d+)\\.html" }, title: {} },
+    },
+    chapter: {
+      url: "https://g.example/c/{chapterKey}.html",
+      pagePattern: "/c/{chapterKey}_(\\d+)\\.html",
+      content: "article",
+      clean: [],
+    },
+  },
+};
+const pagedBook = html(`<h1>書</h1><ul><li><a href="/c/1.html">第一章</a></li><li><a href="/c/2.html">第二章</a></li></ul>`);
+
+test("a chapter split across pages is joined, and stops at the next chapter", async () => {
+  const { transport, requested } = fakeSite({
+    "https://g.example/b/9": pagedBook,
+    "https://g.example/c/1.html": html(`<article>第一章<br>甲</article><a href="/c/1_2.html">下一頁</a><a href="/c/1_2.html">下一頁</a>`),
+    // A "previous page" link to _1 matches the pattern too, and must not repeat page 1.
+    "https://g.example/c/1_2.html": html(`<article>第一章<br>乙</article><a href="/c/1_1.html">上一頁</a><a href="/c/1_3.html">下一頁</a>`),
+    "https://g.example/c/1_3.html": html(`<article>丙</article><a href="/c/1_2.html">上一頁</a><a href="/c/2.html">下一章</a>`),
+    "https://g.example/c/1_1.html": html(`<article>第一章<br>甲</article>`),
+  });
+  const service = createSourceService({ configs: [paged], transport, sleep: noSleep });
+  const chapter = await service.getChapter("paged:9", "1");
+  assert.deepEqual(chapter.paragraphs, ["甲", "乙", "丙"]);
+  assert.equal(chapter.url, "https://g.example/c/1.html", "links to the chapter's first page");
+  assert.ok(!requested.includes("https://g.example/c/2.html"), "does not read into the next chapter");
+  assert.ok(!requested.includes("https://g.example/c/1_1.html"), "does not go back a page");
+});
+
+test("a failed later page fails the chapter instead of showing half of it", async () => {
+  const { transport } = fakeSite({
+    "https://g.example/b/9": pagedBook,
+    "https://g.example/c/1.html": html(`<article>甲</article><a href="/c/1_2.html">下一頁</a>`),
+    "https://g.example/c/1_2.html": html(`<div>redesigned</div>`),
+  });
+  const service = createSourceService({ configs: [paged], transport, sleep: noSleep });
+  await assert.rejects(service.getChapter("paged:9", "1"), { kind: "login_required" });
+});
+
+test("a site with endless page links stops after a fixed number of pages", async () => {
+  let calls = 0;
+  const service = createSourceService({
+    configs: [paged],
+    sleep: noSleep,
+    transport: async (url) => {
+      if (url.pathname === "/b/9") return pagedBook.clone();
+      calls++;
+      return html(`<article>頁${calls}</article><a href="/c/1_${calls + 1}.html">下一頁</a>`);
+    },
+  });
+  assert.equal((await service.getChapter("paged:9", "1")).paragraphs.length, 10);
+  assert.equal(calls, 10);
+});
+
 test("the app's sources are exactly the requested list", () => {
   assert.equal(REQUESTED_SOURCES.length, 60);
   assert.equal(new Set(REQUESTED_SOURCES).size, 60);

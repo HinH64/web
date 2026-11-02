@@ -23,6 +23,11 @@ for (const source of SOURCES) {
     const chapter = await service.getChapter(book.id, book.firstChapter);
     const text = chapter.paragraphs.join("").length;
     if (text < 200) throw new Error(`chapter has only ${text} characters`);
+    // Repeated text means pages were joined wrongly, which no status code shows.
+    const long = chapter.paragraphs.filter((p) => p.length >= 12);
+    const repeated = long.length - new Set(long).size;
+    if (repeated > long.length * 0.1)
+      throw new Error(`${repeated} of ${long.length} paragraphs are repeated`);
     console.log(
       `PASS  ${source.name}: ${books.length} books, "${book.title}" by ${book.author}, ${book.chapters.length} chapters, "${chapter.title}" ${chapter.paragraphs.length} paragraphs, ${text} chars`,
     );
