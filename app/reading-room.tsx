@@ -110,12 +110,14 @@ export default function ReadingRoom({
     const c = current.current;
     if (!canSave.current || !c.content) return;
     progress.current({
+      bookId: book.id,
       chapterId: c.chapterId,
       chapterTitle: c.content.title,
+      chapterIndex: book.chapters.findIndex((x) => x.id === c.chapterId),
       ...locate(),
       updatedAt: Date.now(),
     });
-  }, [locate]);
+  }, [locate, book]);
   const restorePoint = useCallback(
     (a: { paragraph: number; offset: number }) => {
       const p = article.current?.querySelector(

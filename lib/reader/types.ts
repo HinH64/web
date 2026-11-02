@@ -31,21 +31,33 @@ export type ChapterContent = {
   fetchedAt: number;
 };
 export type Position = {
+  /** The edition this position belongs to, since chapter ids differ by source. */
+  bookId?: string;
   chapterId: string;
   chapterTitle: string;
+  /** Used for the progress bar, because the shelf does not keep the catalog. */
+  chapterIndex?: number;
   paragraph: number;
   offset: number;
   updatedAt: number;
 };
+/** One work on the shelf. Its catalog is stored separately, by edition. */
 export type ShelfEntry = {
+  /** Stays the same when the reader switches to another source. */
+  id: string;
+  /** The edition being read, without its catalog. */
   book: Book;
+  /** Other sources known to have this work. */
+  otherEditions?: Book[];
   addedAt: number;
   position?: Position;
-  chapterIds: string[];
+  chapterCount: number;
   unreadIds: string[];
   checkedAt?: number;
   checkError?: string;
 };
+/** What a backup carries for update detection, by edition id. */
+export type Catalogs = Record<string, string[]>;
 export type Bookmark = {
   id: string;
   bookId: string;
@@ -67,7 +79,7 @@ export type Settings = {
   autoCheck: boolean;
 };
 export type Library = {
-  version: 1;
+  version: 2;
   shelf: ShelfEntry[];
   bookmarks: Bookmark[];
   settings: Settings;
@@ -86,7 +98,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoCheck: true,
 };
 export const EMPTY_LIBRARY: Library = {
-  version: 1,
+  version: 2,
   shelf: [],
   bookmarks: [],
   settings: DEFAULT_SETTINGS,

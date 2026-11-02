@@ -55,8 +55,9 @@ npm run lint
 | `web/lib/reader/sources/rule-engine.ts` | 依規則執行搜尋／目錄／正文解析 |
 | `web/lib/reader/sources/http.ts` | 請求層：網域白名單、轉址、限流、頁面解碼、錯誤分類；可替換傳輸方式 |
 | `web/lib/reader/sources/encoding.ts` | GBK／Big5 查詢字串編碼 |
-| `web/lib/reader/storage.ts` | IndexedDB、書籍／章節快取 |
-| `web/lib/reader/reading.ts` | 更新差異、段落定位與備份驗證 |
+| `web/lib/reader/storage.ts` | IndexedDB：逐筆保存書架與書籤、舊資料遷移、分頁同步、章節快取 |
+| `web/lib/reader/reading.ts` | 更新差異、段落定位、紀錄與備份驗證、變更比對 |
+| `web/lib/reader/works.ts` | 按書名合併來源、選擇來源、跨來源對應章節 |
 | `web/lib/reader/requested-sources.ts` | 60 個書源名稱，即書源範圍 |
 | `web/public/sw.js` | 正式版應用程式外殼與靜態資源離線快取 |
 

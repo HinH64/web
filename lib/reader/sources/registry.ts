@@ -23,6 +23,8 @@ const CONFIGS: Partial<Record<RequestedSourceName, SourceConfig>> = {
     hosts: ["www.esjzone.cc"],
     homepage: "https://www.esjzone.cc/list-21/",
     probeQuery: "雨狐",
+    // Often takes over 15 seconds to answer, measured on 2026-11-02.
+    timeoutMs: 30_000,
     rule: {
       keyPattern: "^\\d{1,10}$",
       defaults: {

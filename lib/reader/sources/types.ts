@@ -115,6 +115,8 @@ export type SourceConfig = {
   /** Query used by the source test and the connection button. */
   probeQuery: string;
   minIntervalMs?: number;
+  /** For sites that are slow but do answer. */
+  timeoutMs?: number;
   /** Omit only when a custom adapter is registered for this id. */
   rule?: SourceRule;
 };

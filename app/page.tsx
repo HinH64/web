@@ -48,14 +48,21 @@ import {
   cacheCount,
   clearChapterCache,
   loadBook,
+  loadCatalog,
   loadLibrary,
-  saveLibrary,
+  onLibraryChanged,
+  saveCatalog,
+  saveCatalogs,
+  saveChanges,
   searchBooks,
 } from "@/lib/reader/storage";
 import {
+  createEntry,
+  diffLibrary,
+  readBackup,
   sanitizeSettings,
+  toEdition,
   updateDiff,
-  validateLibrary,
 } from "@/lib/reader/reading";
 import {
   SOURCES,
@@ -109,7 +116,9 @@ export default function Home() {
   const [checking, setChecking] = useState(false),
     [sourceSearch, setSourceSearch] = useState(""),
     [cacheSize, setCacheSize] = useState(0),
-    [restore, setRestore] = useState<Library | null>(null),
+    [restore, setRestore] = useState<ReturnType<typeof readBackup> | null>(null),
+    [skippedRecords, setSkippedRecords] = useState(0),
+    [storageLocked, setStorageLocked] = useState(false),
     [help, setHelp] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null),
     importRef = useRef<HTMLInputElement>(null),
@@ -122,11 +131,18 @@ export default function Home() {
     const t = setTimeout(() => setToast(""), 4400);
     return () => clearTimeout(t);
   }, [toast]);
+  // Nothing is saved until the stored library has been read, so that a failed or
+  // slow load can never replace what is stored with an empty shelf.
+  const canSave = useRef(false);
+  const writes = useRef(0);
   const update = useCallback((fn: (l: Library) => Library) => {
-    const next = fn(lib.current);
+    const previous = lib.current;
+    const next = fn(previous);
     lib.current = next;
     setLibrary(next);
-    saveLibrary(next)
+    if (!canSave.current) return;
+    writes.current++;
+    saveChanges(diffLibrary(previous, next))
       .then(() => setStorageError(""))
       .catch(() =>
         setStorageError(
@@ -136,14 +152,35 @@ export default function Home() {
   }, []);
   useEffect(() => {
     loadLibrary()
-      .then((l) => {
-        lib.current = l;
-        setLibrary(l);
+      .then(({ library: stored, skipped }) => {
+        lib.current = stored;
+        setLibrary(stored);
+        setSkippedRecords(skipped);
+        canSave.current = true;
       })
-      .catch(() =>
-        setStorageError("無法讀取本機資料，請確認此網站可使用瀏覽器儲存空間。"),
-      )
+      .catch(() => {
+        setStorageLocked(true);
+        setStorageError(
+          "無法讀取本機資料。為免覆蓋原有紀錄，目前的變更不會保存，請重新整理頁面再試。",
+        );
+      })
       .finally(() => setReady(true));
+  }, []);
+  useEffect(() => {
+    // Another tab changed something. Read it again, and retry if this tab wrote
+    // in the meantime, so that the newer local change is not replaced.
+    const refresh = () => {
+      if (!canSave.current) return;
+      const seen = writes.current;
+      loadLibrary()
+        .then(({ library: stored }) => {
+          if (seen !== writes.current) return refresh();
+          lib.current = stored;
+          setLibrary(stored);
+        })
+        .catch(() => {});
+    };
+    return onLibraryChanged(refresh);
   }, []);
   useEffect(() => {
     document.documentElement.dataset.theme = library.settings.theme;
@@ -251,19 +288,11 @@ export default function Home() {
   const addBook = useCallback(
     (b: BookDetail) => {
       if (lib.current.shelf.some((e) => e.book.id === b.id)) return;
-      update((l) => ({
-        ...l,
-        shelf: [
-          ...l.shelf,
-          {
-            book: b,
-            addedAt: Date.now(),
-            chapterIds: b.chapters.map((c) => c.id),
-            unreadIds: [],
-            checkedAt: b.checkedAt,
-          },
-        ],
-      }));
+      update((l) => ({ ...l, shelf: [...l.shelf, createEntry(b)] }));
+      void saveCatalog(
+        b.id,
+        b.chapters.map((c) => c.id),
+      ).catch(() => {});
       say("已加入你的書架");
     },
     [update, say],
@@ -332,26 +361,32 @@ export default function Home() {
       for (const entry of [...lib.current.shelf]) {
         try {
           const b = await loadBook(entry.book.id, true);
+          const known = await loadCatalog(b.id).catch(() => []);
           update((l) => ({
             ...l,
             shelf: l.shelf.map((e) => {
               if (e.book.id !== b.id) return e;
               const unreadIds = updateDiff(
-                e.chapterIds,
+                known,
                 b.chapters,
                 e.unreadIds,
+                e.chapterCount,
               );
               added += Math.max(0, unreadIds.length - e.unreadIds.length);
               return {
                 ...e,
-                book: b,
-                chapterIds: b.chapters.map((c) => c.id),
+                book: toEdition(b),
+                chapterCount: b.chapters.length,
                 unreadIds,
                 checkedAt: b.checkedAt,
                 checkError: undefined,
               };
             }),
           }));
+          await saveCatalog(
+            b.id,
+            b.chapters.map((c) => c.id),
+          ).catch(() => {});
         } catch (e) {
           failures++;
           update((l) => ({
@@ -674,7 +709,15 @@ export default function Home() {
             <div className="notice error">
               <CircleAlert size={17} />
               {storageError}
-              <button onClick={exportBackup}>匯出備份</button>
+              {!storageLocked && (
+                <button onClick={exportBackup}>匯出備份</button>
+              )}
+            </div>
+          )}
+          {skippedRecords > 0 && (
+            <div className="notice error">
+              <CircleAlert size={17} />有 {skippedRecords}{" "}
+              筆紀錄無法讀取，已跳過但仍保留在此瀏覽器。
             </div>
           )}
           <div className="page-heading">
@@ -996,7 +1039,7 @@ export default function Home() {
                                 <div>
                                   <i
                                     style={{
-                                      width: `${Math.max(2, ((entry.chapterIds.indexOf(entry.position.chapterId) + 1) / Math.max(1, entry.chapterIds.length)) * 100)}%`,
+                                      width: `${Math.max(2, (((entry.position.chapterIndex ?? -1) + 1) / Math.max(1, entry.chapterCount)) * 100)}%`,
                                     }}
                                   />
                                 </div>
@@ -1448,8 +1491,9 @@ export default function Home() {
           const file = e.target.files?.[0];
           if (!file) return;
           try {
-            if (file.size > 10000000) throw new Error("備份檔案過大");
-            setRestore(validateLibrary(JSON.parse(await file.text())));
+            // Older backups include full catalogs, so they can be large.
+            if (file.size > 200_000_000) throw new Error("備份檔案過大");
+            setRestore(readBackup(JSON.parse(await file.text())));
           } catch (err) {
             say(errorMessage(err));
           }
@@ -1528,8 +1572,8 @@ export default function Home() {
             <Upload size={30} />
             <h3>帶回你的閱讀時光</h3>
             <p>
-              這份備份包含 {restore.shelf.length} 本書、
-              {restore.bookmarks.length} 個書籤。
+              這份備份包含 {restore.library.shelf.length} 本書、
+              {restore.library.bookmarks.length} 個書籤。
             </p>
             <p>還原將取代目前的書架、進度與設定。可先匯出目前資料，再繼續。</p>
             <div className="button-row">
@@ -1539,7 +1583,8 @@ export default function Home() {
               <button
                 className="button button-primary"
                 onClick={() => {
-                  update(() => restore);
+                  update(() => restore.library);
+                  void saveCatalogs(restore.catalogs).catch(() => {});
                   setRestore(null);
                   say("閱讀備份已還原");
                 }}

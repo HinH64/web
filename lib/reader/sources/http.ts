@@ -93,7 +93,7 @@ export function createHttp({
           let response: Response;
           try {
             response = await transport(url, {
-              signal: AbortSignal.timeout(TIMEOUT_MS),
+              signal: AbortSignal.timeout(config.timeoutMs ?? TIMEOUT_MS),
               redirect: "manual",
               headers: {
                 "User-Agent": USER_AGENT,

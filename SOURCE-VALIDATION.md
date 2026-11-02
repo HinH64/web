@@ -13,7 +13,7 @@
 | 小說狂人 | czbooks.net | 正文夾雜站點文字，以規則清除 |
 | 黃金屋中文 | tw.hjwzw.com | 唯一結果時直接顯示書籍頁 |
 | 玫瑰言情網 | www.mgyqw.com | GBK；查詢須轉簡體；目錄按欄排列，須依章節 ID 排序 |
-| ESJ 輕小說 | www.esjzone.cc | 連線偶有逾時 |
+| ESJ 輕小說 | www.esjzone.cc | 回應常超過 15 秒，逾時放寬至 30 秒 |
 | 飄天文學 | www.piaotia.com | GBK；唯一結果時轉址到 http 的書籍頁；頁面沒有 body 標籤 |
 | UU看書 | www.uuread.tw | POST 搜尋；一章分多頁 |
 | 無憂書城 | www.51shucheng.net | 書籍 ID 含分類路徑；查詢須轉簡體 |
