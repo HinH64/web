@@ -33,6 +33,7 @@ test("authors match despite script and one wrong character, not otherwise", () =
   assert.ok(authorsMatch("作者：忘語", "忘語"));
   assert.ok(authorsMatch("作者未註明", "忘語"), "an unknown author matches");
   assert.ok(authorsMatch("ESJ 原創作者", "明太子沙律"));
+  assert.ok(authorsMatch("微風小說網", "天蠶土豆"), "a site's own name is not an author");
   assert.ok(!authorsMatch("忘語", "天蠶土豆"));
   assert.ok(!authorsMatch("唐家三少", "天蠶土豆"));
 });

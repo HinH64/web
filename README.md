@@ -47,8 +47,11 @@ npm run lint
 
 | 位置 | 用途 |
 | --- | --- |
-| `web/app/page.tsx` | 書架、搜尋、更新、書籤、書源與設定 |
-| `web/app/reading-room.tsx` | 閱讀、段落定位、書籤、章節操作 |
+| `web/components/reader/app.tsx` | 版面、側欄與工作區路由 |
+| `web/components/reader/library-context.tsx` | 書架狀態、儲存、更新檢查 |
+| `web/components/reader/search-view.tsx`、`book-view.tsx`、`lists-view.tsx`、`settings-view.tsx` | 首頁與搜尋、書籍與目錄、更新與書籤、設定 |
+| `web/components/reader/reader-view.tsx` | 閱讀、段落定位、書籤、換源與來源失效切換 |
+| `web/lib/reader/route.ts`、`search-store.ts` | 網址路由、跨來源搜尋 |
 | `web/app/api/library/route.ts` | 書源 API |
 | `web/lib/reader/sources/service.ts` | 統一書源服務：識別碼驗證、快取、章節歸屬檢查 |
 | `web/lib/reader/sources/registry.ts` | 已接通書源的設定與解析規則 |
@@ -63,7 +66,7 @@ npm run lint
 
 ## 目前界線
 
-書架與紀錄依瀏覽器保存，尚未加入帳戶與跨裝置同步。沒有關閉後的背景排程、推播、TTS、TXT / EPUB 匯入或 `.ibs` 通用匯入。各版本書籍的進度分別保存；更換來源時請確認書名、作者、版本與章節。
+書架與紀錄依瀏覽器保存，尚未加入帳戶與跨裝置同步。沒有關閉後的背景排程、推播、TTS、TXT / EPUB 匯入或 `.ibs` 通用匯入。同一本書只佔書架一格；換來源時依章節名稱對應，無法確定時由使用者選擇章節。
 
 書源只讀取公開可取得的文字。付費、需登入、外連或網站驗證的章節提供原站入口。新增來源須完成實際取用驗證後才加入可搜尋列表。
 

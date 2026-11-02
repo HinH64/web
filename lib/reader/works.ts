@@ -21,8 +21,15 @@ const TITLE_NOISE =
 export const normalizeTitle = (title: string) =>
   keepWordChars(toSimplified(title).replace(TITLE_NOISE, ""));
 
-// Values the source rules use when a site does not give an author.
-const UNKNOWN_AUTHORS = new Set(["作者未注明", "esj原创作者", "未注明", "佚名"]);
+// Values the source rules use when a site does not give an author, and values
+// sites themselves put there, such as their own name.
+const UNKNOWN_AUTHORS = new Set([
+  "作者未注明",
+  "esj原创作者",
+  "未注明",
+  "佚名",
+  "微风小说网",
+]);
 
 export function normalizeAuthor(author: string) {
   const name = keepWordChars(
@@ -80,6 +87,28 @@ export function groupEditions(books: Book[]): Work[] {
       });
   }
   return works;
+}
+
+/**
+ * Puts the book being searched for first: an exact title, then a title starting
+ * with the query, then books more sources carry. Ties keep their order.
+ */
+export function sortWorks(works: Work[], query: string) {
+  const wanted = normalizeTitle(query);
+  const score = (work: Work) => {
+    const title = normalizeTitle(work.title);
+    if (title === wanted) return 2;
+    return title.startsWith(wanted) ? 1 : 0;
+  };
+  return works
+    .map((work, index) => ({ work, index }))
+    .sort(
+      (x, y) =>
+        score(y.work) - score(x.work) ||
+        y.work.editions.length - x.work.editions.length ||
+        x.index - y.index,
+    )
+    .map((x) => x.work);
 }
 
 /**

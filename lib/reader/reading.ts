@@ -239,17 +239,57 @@ export function readBackup(data: unknown): {
 
 export const validateLibrary = (data: unknown) => readBackup(data).library;
 
+type EditionDetail = Book & { chapters: Chapter[]; checkedAt: number };
+
 export function createEntry(
-  book: Book & { chapters: Chapter[]; checkedAt: number },
+  book: EditionDetail,
+  otherEditions: Book[] = [],
 ): ShelfEntry {
   return {
     id: book.id,
     book: toEdition(book),
+    ...(otherEditions.length
+      ? { otherEditions: otherEditions.map(toEdition) }
+      : {}),
     addedAt: Date.now(),
     chapterCount: book.chapters.length,
     unreadIds: [],
     checkedAt: book.checkedAt,
   };
+}
+
+/** The shelf entry a book belongs to, under any of its editions. */
+export const entryForBook = (shelf: ShelfEntry[], bookId: string) =>
+  shelf.find(
+    (e) =>
+      e.book.id === bookId || e.otherEditions?.some((x) => x.id === bookId),
+  );
+
+/**
+ * Moves an entry to another edition. The entry keeps its id, so it stays the same
+ * book on the shelf. Unread marks go, because chapter ids differ by source, and
+ * the position is the caller's: only it knows which chapter matched.
+ */
+export function switchEdition(
+  entry: ShelfEntry,
+  target: EditionDetail,
+  position?: Position,
+): ShelfEntry {
+  const others = [entry.book, ...(entry.otherEditions ?? [])].filter(
+    (e) => e.id !== target.id,
+  );
+  const next: ShelfEntry = {
+    ...entry,
+    book: toEdition(target),
+    otherEditions: others,
+    chapterCount: target.chapters.length,
+    unreadIds: [],
+    checkedAt: target.checkedAt,
+  };
+  delete next.checkError;
+  if (position) next.position = position;
+  else delete next.position;
+  return next;
 }
 
 export type LibraryChanges = {
