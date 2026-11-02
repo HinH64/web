@@ -12,10 +12,7 @@ import type {
 
 type Vars = Record<string, string>;
 
-/**
- * The parts of linkedom's DOM used here. Declared locally because the
- * Cloudflare types replace the global Element with HTMLRewriter's.
- */
+/** The parts of linkedom's DOM used here, which also covers documents. */
 type Dom = {
   textContent: string | null;
   querySelector(selector: string): Dom | null;

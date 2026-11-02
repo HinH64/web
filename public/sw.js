@@ -1,4 +1,4 @@
-const CACHE = "shiguang-shell-v1";
+const CACHE = "shiguang-shell-v2";
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
@@ -35,9 +35,6 @@ self.addEventListener("fetch", (event) => {
     event.request.method !== "GET" ||
     url.origin !== self.location.origin ||
     url.pathname.startsWith("/api/") ||
-    url.pathname.includes("signin-with-chatgpt") ||
-    url.pathname.includes("signout-with-chatgpt") ||
-    url.pathname.includes("callback") ||
     event.request.headers.has("RSC")
   )
     return;

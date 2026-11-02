@@ -17,19 +17,21 @@
 需求：Node.js >= 22.13、npm。於 `web/` 內執行：
 
 ```powershell
-npm run install:ci
-npm run dev -- --hostname 127.0.0.1 --port 5173
+npm install
+npm run build
+npm start
 ```
 
-使用終端顯示的網址開啟。書籍資料由 API 即時取自來源網站，首次讀取需網路；進度與快取保存在瀏覽器的 IndexedDB。離線應用程式外殼應以正式建置測試。
+日常使用開啟 <http://127.0.0.1:5174>。開發時改用 `npm run dev`，網址是 <http://127.0.0.1:5173>。書籍資料由 API 即時取自來源網站，首次讀取需網路；進度與快取保存在瀏覽器的 IndexedDB，並依網址分開，所以兩個網址的書架互不相通。Service Worker 只在正式建置啟用，離線功能應以 `npm start` 測試。
+
+兩個指令都只綁定本機，同一網路的其他裝置無法連線。API 沒有登入機制，開放給其他裝置或部署前須先加上存取控制。
 
 ```powershell
 npm run typecheck
 npm test
 npm run test:live
 npm run test:sources
-npm run build
-npm run start -- --port 5174
+npm run lint
 ```
 
 `npm test` 使用固定樣本，可離線執行。`test:sources` 以 app 相同的服務測試所有已接通書源（搜尋 → 目錄 → 正文）並列出待接通的名稱，需要網路。網路來源可能變動或逾時。
@@ -64,4 +66,4 @@ npm run start -- --port 5174
 
 書源只讀取公開可取得的文字。付費、需登入、外連或網站驗證的章節提供原站入口。新增來源須完成實際取用驗證後才加入可搜尋列表。
 
-採用 Sites 的 Vinext starter；應用程式本身不需要 D1、R2 或其他外部帳戶。Sites 託管保持個人私有範圍。閱讀內容不寫入 Git 或部署檔案。
+採用標準 Next.js，目前以本機使用為目標，不需要資料庫或外部帳戶。閱讀內容不寫入 Git。

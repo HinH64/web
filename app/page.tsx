@@ -158,8 +158,15 @@ export default function Home() {
     window.addEventListener("online", connectivity);
     window.addEventListener("offline", connectivity);
     window.addEventListener("beforeinstallprompt", prompt);
-    if ("serviceWorker" in navigator)
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    if ("serviceWorker" in navigator) {
+      if (process.env.NODE_ENV === "production")
+        navigator.serviceWorker.register("/sw.js").catch(() => {});
+      // A worker left on the dev port would serve stale code from its cache.
+      else
+        void navigator.serviceWorker
+          .getRegistrations()
+          .then((all) => all.forEach((r) => void r.unregister()));
+    }
     return () => {
       window.removeEventListener("online", connectivity);
       window.removeEventListener("offline", connectivity);
