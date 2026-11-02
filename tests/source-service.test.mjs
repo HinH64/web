@@ -33,6 +33,81 @@ function fakeSite(pages) {
 }
 
 const esj = SOURCES.find((s) => s.id === "esj");
+
+test("52書庫 keeps clean book identity and the complete ordered page catalog", async () => {
+  const query = encodeURIComponent("云城");
+  const { transport } = fakeSite({
+    [`https://www.52shuku.net/so/search.php?q=${query}`]: html(`
+      <article class="excerpt"><h2><a href="https://www.52shuku.net/yanqing/02_b/Test1.html">
+        1. 云城_小林【完结+番外】</a></h2></article>`),
+    "https://www.52shuku.net/yanqing/02_b/Test1.html": html(`
+      <h1 class="article-title">云城_小林【完结+番外】</h1>
+      <article class="article-content"><p>小說簡介：</p><p>虛構的城市故事。</p></article>
+      <ul><li class="mulu"><a href="/yanqing/02_b/Test1_10.html">第9页</a></li>
+      <li class="mulu"><a href="/yanqing/02_b/Test1_2.html">第1页</a></li>
+      <li class="mulu"><a href="/yanqing/02_b/Other_3.html">其他書</a></li>
+      <li class="mulu"><a href="/yanqing/02_b/Test1_3.html">第2页</a></li>
+      <li class="mulu"><a href="/yanqing/02_b/Test1_2.html">重複頁</a></li></ul>`),
+    "https://www.52shuku.net/yanqing/02_b/Test1_2.html": html(`
+      <article class="article-content"><p>小林走進城門。</p>
+      <p>她看了看<a href="/Tags_Nan/fixture.html">天空</a>。</p>
+      <p>作者有话要说：明天繼續。</p>
+      <div class="pagination2"><a href="Test1_3.html">下一页</a></div>
+      <p>哦豁，小伙伴们如果觉得52书库不错，记得收藏网址。</p>
+      <p>传送门：排行榜单 | 小林</p><script>advertisement()</script></article>`),
+  });
+  const service = createSourceService({ transport, sleep: noSleep });
+  const results = await service.search("shuku52", "雲城");
+  assert.equal(results[0].id, "shuku52:yanqing/02_b/Test1");
+  assert.equal(results[0].title, "云城");
+  assert.equal(results[0].author, "小林");
+  const book = await service.getBook(results[0].id);
+  assert.equal(book.title, "云城");
+  assert.equal(book.author, "小林");
+  assert.deepEqual(book.chapters.map((c) => c.id), ["2", "3", "10"]);
+  const chapter = await service.getChapter(book.id, book.firstChapter);
+  assert.deepEqual(chapter.paragraphs, [
+    "小林走進城門。", "她看了看天空。", "作者有话要说：明天繼續。",
+  ]);
+  assert.equal(sourceChapterUrl(book, "3"), "https://www.52shuku.net/yanqing/02_b/Test1_3.html");
+});
+
+test("同人小說網 uses simplified GBK POST and removes edition labels from titles", async () => {
+  const searchUrl = "https://www.trxs.cc/e/search/index.php";
+  const { transport: pages } = fakeSite({
+    [searchUrl]: html(`<div class="books"><div class="bk"><a href="/tongren/42.html">
+      <h3>云城(1-3卷19章)</h3><div class="booknews">作者:小林  <label>2.01 MB</label> 2026-11-02</div>
+      </a></div></div>`),
+    "https://www.trxs.cc/tongren/42.html": html(`
+      <div class="book_info"><h1>云城(全本)</h1><div class="date"><a href="/author/1/xiaolin.html">小林</a></div></div>
+      <div class="book_list"><ul><li><a href="/tongren/42/10.html">第10节</a></li>
+      <li><a href="/tongren/42/2.html">第2节</a></li>
+      <li><a href="/tongren/99/1.html">其他書</a></li></ul></div>`),
+    "https://www.trxs.cc/tongren/42/2.html": html(`
+      <div class="read_chapterDetail"><p>小林出發了。</p><p>她帶著一張地圖。</p><script>ad()</script></div>
+      <div class="pageNav">下一章</div>`),
+  });
+  const service = createSourceService({
+    sleep: noSleep,
+    transport: async (url, init) => {
+      if (url.href === searchUrl) {
+        assert.equal(init.method, "POST");
+        assert.equal(init.body, `keyboard=${encodeQuery("云城", "gbk")}&show=title&classid=0`);
+      }
+      return pages(url, init);
+    },
+  });
+  const results = await service.search("trxs", "雲城");
+  assert.equal(results[0].title, "云城");
+  assert.equal(results[0].author, "小林");
+  const book = await service.getBook(results[0].id);
+  assert.equal(book.title, "云城");
+  assert.equal(book.author, "小林");
+  assert.deepEqual(book.chapters.map((c) => c.id), ["2", "10"]);
+  const chapter = await service.getChapter(book.id, book.firstChapter);
+  assert.deepEqual(chapter.paragraphs, ["小林出發了。", "她帶著一張地圖。"]);
+});
+
 const esjPages = {
   [`https://www.esjzone.cc/tags/${encodeURIComponent("雨狐")}/`]: html(`
     <div class="card-title"><a href="/detail/111.html">雨狐小姐的日常</a></div>
