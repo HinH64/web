@@ -57,13 +57,8 @@ async function fetchAPI<T>(params: Record<string, string>): Promise<T> {
   if (!response.ok) throw new Error(result.error ?? "暫時無法讀取書源");
   return result;
 }
-export const searchBooks = (source: string, q: string, discover = false) =>
-  fetchAPI<import("./types").Book[]>({
-    action: "search",
-    source,
-    q,
-    discover: discover ? "1" : "0",
-  });
+export const searchBooks = (source: string, q: string) =>
+  fetchAPI<import("./types").Book[]>({ action: "search", source, q });
 export async function loadBook(id: string, fresh = false): Promise<BookDetail> {
   try {
     const result = await fetchAPI<BookDetail>({

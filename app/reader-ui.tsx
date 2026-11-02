@@ -14,13 +14,8 @@ import {
   X,
 } from "lucide-react";
 import { Converter } from "opencc-js";
-import {
-  sourceName,
-  type Book,
-  type BookDetail,
-  type Library,
-  type Settings,
-} from "@/lib/reader/types";
+import type { Book, BookDetail, Library, Settings } from "@/lib/reader/types";
+import { sourceName } from "@/lib/reader/sources/registry";
 export const traditional = Converter({ from: "cn", to: "tw" });
 export const simplified = Converter({ from: "tw", to: "cn" });
 export const errorMessage = (e: unknown) =>

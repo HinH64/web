@@ -7,12 +7,7 @@ import {
   sanitizeSettings,
 } from "../lib/reader/reading.ts";
 import { EMPTY_LIBRARY } from "../lib/reader/types.ts";
-import {
-  getBook,
-  getChapter,
-  parseBookId,
-  search,
-} from "../lib/reader/sources.ts";
+import { sourceService } from "../lib/reader/sources/service.ts";
 
 test("update detection preserves unread chapters, ignores reordering and removed chapters", () => {
   assert.deepEqual(
@@ -58,7 +53,7 @@ test("backups reject malformed records and clamp display settings", () => {
       bookmarks: [
         {
           id: "x",
-          bookId: "ws:西遊記",
+          bookId: "esj:1",
           chapterId: "x",
           excerpt: "x",
           paragraph: 0,
@@ -67,45 +62,79 @@ test("backups reject malformed records and clamp display settings", () => {
     }),
   );
 });
-test("source identifiers never accept arbitrary URLs or namespaces", () => {
-  assert.deepEqual(parseBookId("sf:292551"), { source: "sf", key: "292551" });
-  for (const id of [
-    "sf:../1",
-    "ws:Special:Search",
-    "https://localhost",
-    "ws:",
-    "ws:<script>",
-  ])
-    assert.throws(() => parseBookId(id));
+
+const shelfEntry = (id, source, url) => ({
+  book: {
+    id,
+    source,
+    title: "t",
+    author: "a",
+    description: "",
+    genre: "g",
+    url,
+  },
+  addedAt: 1,
+  chapterIds: ["1"],
+  unreadIds: [],
+  position: {
+    chapterId: "1",
+    chapterTitle: "c",
+    paragraph: 3,
+    offset: 0.5,
+    updatedAt: 1,
+  },
+});
+test("libraries saved before SF and Wikisource were removed still load intact", () => {
+  const stored = {
+    ...EMPTY_LIBRARY,
+    sources: ["sf", "esj", "ws"],
+    shelf: [
+      shelfEntry("sf:292551", "sf", "https://m.sfacg.com/b/292551/"),
+      shelfEntry("ws:西遊記", "ws", "https://zh.wikisource.org/wiki/x"),
+      shelfEntry("esj:1", "esj", "https://www.esjzone.cc/detail/1.html"),
+    ],
+    bookmarks: [
+      {
+        id: "b",
+        bookId: "ws:水滸傳 (120回本)",
+        bookTitle: "t",
+        chapterId: "c",
+        chapterTitle: "c",
+        excerpt: "e",
+        createdAt: 1,
+        paragraph: 0,
+      },
+    ],
+  };
+  const loaded = validateLibrary(stored);
+  assert.equal(loaded.shelf.length, 3);
+  assert.equal(loaded.shelf[0].position.paragraph, 3);
+  assert.equal(loaded.bookmarks.length, 1);
+  assert.deepEqual(loaded.sources, ["esj"]);
+});
+test("backups cannot point a book's link at an unknown website", () => {
+  assert.throws(
+    () =>
+      validateLibrary({
+        ...EMPTY_LIBRARY,
+        shelf: [shelfEntry("esj:1", "esj", "https://evil.example/")],
+      }),
+    /來源網址/,
+  );
 });
 test(
-  "live sources: search, complete catalog, readable chapters, locked chapter handling",
+  "live ESJ: search, catalog and readable chapter through the service",
   { skip: process.env.LIVE_SOURCES !== "1", timeout: 90000 },
   async () => {
-    const books = await search("sf", "魔女");
-    assert.ok(books.length > 0);
-    const book = await getBook("sf:292551");
-    assert.ok(book.chapters.length > 100);
-    const chapter = await getChapter(book.id, book.firstChapter);
-    assert.ok(chapter.paragraphs.length > 10);
-    const locked = book.chapters.find((c) => c.locked);
-    assert.ok(locked);
-    await assert.rejects(getChapter(book.id, locked.id), /付費/);
-    const classic = await getBook("ws:西遊記");
-    assert.equal(classic.chapters.length, 100);
-    for (const ch of classic.chapters.slice(0, 2)) {
-      const content = await getChapter(classic.id, ch.id);
-      assert.ok(content.paragraphs.join("").length > 1000);
-    }
-    const esjResults = await search("esj", "雨狐");
-    assert.ok(esjResults.some((b) => b.id === "esj:1788983302"));
+    const results = await sourceService.search("esj", "雨狐");
+    assert.ok(results.some((b) => b.id === "esj:1788983302"));
     assert.ok(
-      esjResults.length < 5,
+      results.length < 5,
       "search must exclude unrelated sidebar recommendations",
     );
-    const esj = await getBook("esj:1788983302");
-    assert.ok(esj.chapters.length > 10);
-    const text = await getChapter(esj.id, esj.firstChapter);
+    const book = await sourceService.getBook("esj:1788983302");
+    assert.ok(book.chapters.length > 10);
+    const text = await sourceService.getChapter(book.id, book.firstChapter);
     assert.ok(text.paragraphs.join("").length > 1000);
   },
 );

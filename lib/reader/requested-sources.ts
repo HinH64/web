@@ -59,39 +59,6 @@ export const REQUESTED_SOURCES = [
   "愛麗絲書屋",
   "有度中文網",
   "台灣小說網",
-];
-export const SOURCE_FINDINGS: Record<
-  string,
-  { status: "ready" | "blocked" | "partial"; note: string; url: string }
-> = {
-  ESJ輕小說: {
-    status: "ready",
-    note: "已接通搜尋、目錄、公開文字章節與更新檢查",
-    url: "https://www.esjzone.cc/list-21/",
-  },
-  小說狂人: {
-    status: "blocked",
-    note: "伺服器讀取遇到 Cloudflare 驗證（HTTP 403）",
-    url: "https://czbooks.net/",
-  },
-  UU看書: {
-    status: "blocked",
-    note: "伺服器讀取遭 Cloudflare 封鎖（HTTP 403）",
-    url: "https://uukanshu.cc/",
-  },
-  "69書吧": {
-    status: "blocked",
-    note: "伺服器讀取遇到 Cloudflare 驗證（HTTP 403）",
-    url: "https://www.69shuba.com/",
-  },
-  夢遠書城: {
-    status: "partial",
-    note: "首頁可讀；搜尋、章節介接待完成",
-    url: "https://www.my285.com/",
-  },
-  黃金屋中文: {
-    status: "partial",
-    note: "首頁可讀；搜尋、章節介接待完成",
-    url: "https://tw.hjwzw.com/index.html",
-  },
-};
+] as const;
+
+export type RequestedSourceName = (typeof REQUESTED_SOURCES)[number];

@@ -4,6 +4,12 @@ import {
   type Library,
   type Settings,
 } from "./types.ts";
+import { CONNECTED_SOURCE_IDS, SOURCES } from "./sources/registry.ts";
+
+// Removed sources stay valid here so existing shelves, progress and backups
+// keep loading. Their books can still be read from cache or removed.
+const REMOVED_SOURCE_HOSTS = ["m.sfacg.com", "zh.wikisource.org"];
+const BOOK_HOSTS = [...SOURCES.flatMap((s) => s.hosts), ...REMOVED_SOURCE_HOSTS];
 
 export function updateDiff(
   previous: string[],
@@ -74,12 +80,12 @@ export function validateLibrary(data: unknown): Library {
     throw new Error("不支援此備份版本或資料過大");
   const validId = (x: unknown) =>
     typeof x === "string" &&
-    /^((?:sf|esj):\d{1,10}|ws:[^\x00-\x1f:#<>\[\]{}|]{1,200})$/.test(x);
+    /^[a-z][a-z0-9-]{0,31}:[^\x00-\x1f:#<>\[\]{}|]{1,200}$/.test(x);
   for (const e of d.shelf) {
     if (
       !e?.book ||
       !validId(e.book.id) ||
-      !["ws", "sf", "esj"].includes(e.book.source) ||
+      typeof e.book.source !== "string" ||
       !e.book.id.startsWith(`${e.book.source}:`) ||
       typeof e.book.title !== "string" ||
       !Array.isArray(e.chapterIds) ||
@@ -98,12 +104,7 @@ export function validateLibrary(data: unknown): Library {
       throw new Error("備份中的書籍資料不完整");
     try {
       const url = new URL(e.book.url);
-      if (
-        url.protocol !== "https:" ||
-        !["m.sfacg.com", "www.esjzone.cc", "zh.wikisource.org"].includes(
-          url.hostname,
-        )
-      )
+      if (url.protocol !== "https:" || !BOOK_HOSTS.includes(url.hostname))
         throw new Error();
     } catch {
       throw new Error("備份中的來源網址不正確");
@@ -141,7 +142,7 @@ export function validateLibrary(data: unknown): Library {
     bookmarks: d.bookmarks,
     settings: sanitizeSettings(d.settings),
     sources: Array.isArray(d.sources)
-      ? d.sources.filter((x) => x === "sf" || x === "ws" || x === "esj")
-      : ["sf", "ws", "esj"],
+      ? d.sources.filter((x) => CONNECTED_SOURCE_IDS.includes(x))
+      : [...CONNECTED_SOURCE_IDS],
   };
 }

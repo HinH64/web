@@ -4,13 +4,13 @@
 
 ## 第一版
 
-- ESJ 輕小說、SF 輕小說、中文維基文庫的獨立書源介接。
+- 統一書源服務：所有網站走同一套請求、解析、快取與錯誤分類；目前接通 ESJ 輕小說。
 - 依書名／作者搜尋、完整章節目錄、加入書架、連續捲動閱讀。
 - 本機閱讀位置、書籤、字級／行距／寬度／字體／繁簡設定、三種閱讀背景。
 - 手動與使用期間每 15 分鐘目錄更新檢查；檢查失敗保留上次成功結果。
 - 下一章預載、最多 60 章快取、正式版應用程式外殼離線載入。
 - PWA 圖示與安裝描述、鍵盤操作、響應式排版、JSON 備份與還原。
-- 完整保留使用者提供的 60 個書源名稱，分別標示可使用、部分驗證、存取受限或待驗證。
+- 書源範圍即使用者提供的 60 個名稱，分別標示可使用或待接通。
 
 ## 本機執行
 
@@ -27,11 +27,19 @@ npm run dev -- --hostname 127.0.0.1 --port 5173
 npm run typecheck
 npm test
 npm run test:live
+npm run test:sources
 npm run build
 npm run start -- --port 5174
 ```
 
-`test:live` 會驗證三個實際來源，需要網路；固定邏輯測試可離線執行。網路來源可能變動或逾時，應先查看書源管理中的連線結果。
+`npm test` 使用固定樣本，可離線執行。`test:sources` 以 app 相同的服務測試所有已接通書源（搜尋 → 目錄 → 正文）並列出待接通的名稱，需要網路。網路來源可能變動或逾時。
+
+## 新增書源
+
+1. 在 `web/lib/reader/sources/registry.ts` 以 `REQUESTED_SOURCES` 中的名稱新增設定：允許的網域與解析規則（URL 範本、CSS selector）。
+2. 執行 `npm run test:sources`。
+
+規則無法描述的網站（例如需要 POST 搜尋或 GBK 編碼查詢字串），可寫自訂 adapter 並經 `createSourceService` 的 `adapters` 註冊。其餘程式不需修改。
 
 ## 程式位置
 
@@ -40,10 +48,13 @@ npm run start -- --port 5174
 | `web/app/page.tsx` | 書架、搜尋、更新、書籤、書源與設定 |
 | `web/app/reading-room.tsx` | 閱讀、段落定位、書籤、章節操作 |
 | `web/app/api/library/route.ts` | 書源 API |
-| `web/lib/reader/sources.ts` | 網域白名單、搜尋／目錄／正文 adapters |
+| `web/lib/reader/sources/service.ts` | 統一書源服務：識別碼驗證、快取、章節歸屬檢查 |
+| `web/lib/reader/sources/registry.ts` | 已接通書源的設定與解析規則 |
+| `web/lib/reader/sources/rule-engine.ts` | 依規則執行搜尋／目錄／正文解析 |
+| `web/lib/reader/sources/http.ts` | 請求層：網域白名單、轉址、限流、編碼、錯誤分類；可替換傳輸方式 |
 | `web/lib/reader/storage.ts` | IndexedDB、書籍／章節快取 |
 | `web/lib/reader/reading.ts` | 更新差異、段落定位與備份驗證 |
-| `web/lib/reader/requested-sources.ts` | 60 個候選書源與已驗證狀態 |
+| `web/lib/reader/requested-sources.ts` | 60 個書源名稱，即書源範圍 |
 | `web/public/sw.js` | 正式版應用程式外殼與靜態資源離線快取 |
 
 ## 目前界線

@@ -18,14 +18,14 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
-import {
-  sourceName,
-  type BookDetail,
-  type Bookmark,
-  type ChapterContent,
-  type Position,
-  type Settings,
+import type {
+  BookDetail,
+  Bookmark,
+  ChapterContent,
+  Position,
+  Settings,
 } from "@/lib/reader/types";
+import { sourceChapterUrl, sourceName } from "@/lib/reader/sources/registry";
 import { loadChapter } from "@/lib/reader/storage";
 import { visibleParagraph } from "@/lib/reader/reading";
 import {
@@ -320,13 +320,7 @@ export default function ReadingRoom({
     document.addEventListener("fullscreenchange", on);
     return () => document.removeEventListener("fullscreenchange", on);
   }, []);
-  const url =
-    content?.url ??
-    (book.source === "sf"
-      ? `https://m.sfacg.com/c/${chapterId}/`
-      : book.source === "esj"
-        ? `https://www.esjzone.cc/forum/${book.id.slice(4)}/${chapterId}.html`
-        : book.url);
+  const url = content?.url ?? sourceChapterUrl(book, chapterId);
   return (
     <div
       className="reader-shell"
@@ -533,9 +527,6 @@ export default function ReadingRoom({
                 來源：{sourceName(book.source)} · {convert(book.author)}
                 <ExternalLink size={12} />
               </a>
-              {book.source === "ws" && (
-                <small>文字來源與授權說明請見維基文庫原頁。</small>
-              )}
             </div>
           </article>
         )}

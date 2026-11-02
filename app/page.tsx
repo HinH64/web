@@ -34,10 +34,8 @@ import {
   X,
 } from "lucide-react";
 import {
-  SOURCES,
   EMPTY_LIBRARY,
   DEFAULT_SETTINGS,
-  sourceName,
   type Book,
   type BookDetail,
   type Bookmark,
@@ -60,9 +58,11 @@ import {
   validateLibrary,
 } from "@/lib/reader/reading";
 import {
-  REQUESTED_SOURCES,
-  SOURCE_FINDINGS,
-} from "@/lib/reader/requested-sources";
+  SOURCES,
+  SOURCE_CATALOG,
+  isConnectedSource,
+  sourceName,
+} from "@/lib/reader/sources/registry";
 import {
   BookDialog,
   Cover,
@@ -98,10 +98,10 @@ export default function Home() {
     [filter, setFilter] = useState("all"),
     [layout, setLayout] = useState("grid"),
     [sort, setSort] = useState("recent");
-  const [results, setResults] = useState<Partial<Record<SourceId, Book[]>>>({}),
-    [sourceStates, setSourceStates] = useState<
-      Partial<Record<SourceId, SourceState>>
-    >({});
+  const [results, setResults] = useState<Record<SourceId, Book[]>>({}),
+    [sourceStates, setSourceStates] = useState<Record<SourceId, SourceState>>(
+      {},
+    );
   const [detail, setDetail] = useState<BookDetail | null>(null),
     [opening, setOpening] = useState(""),
     [detailError, setDetailError] = useState(""),
@@ -182,7 +182,7 @@ export default function Home() {
     setSourceStates({});
     for (const source of lib.current.sources) {
       setSourceStates((s) => ({ ...s, [source]: { state: "loading" } }));
-      searchBooks(source, query, !query)
+      searchBooks(source, query)
         .then((books) => {
           if (ticket !== seq.current) return;
           setResults((r) => ({ ...r, [source]: books }));
@@ -211,7 +211,7 @@ export default function Home() {
       setResults({});
       setSourceStates(
         Object.fromEntries(
-          lib.current.sources.map((id) => [id, { state: "loading" }]),
+          lib.current.sources.map((id) => [id, { state: "loading" as const }]),
         ),
       );
     }
@@ -463,7 +463,7 @@ export default function Home() {
     try {
       const b = await searchBooks(
         id,
-        id === "ws" ? "西遊記" : id === "esj" ? "雨狐" : "冒險",
+        SOURCES.find((s) => s.id === id)?.probeQuery ?? "",
       );
       setSourceStates((s) => ({ ...s, [id]: { state: "success" } }));
       say(`${sourceName(id)} 連線成功，取得 ${b.length} 筆結果`);
@@ -800,7 +800,7 @@ export default function Home() {
                   </form>
                   <div className="search-chips">
                     <span>試著找找</span>
-                    {["冒險", "魔法", "雨狐", "西遊記", "紅樓夢"].map((q) => (
+                    {["冒險", "魔法", "雨狐"].map((q) => (
                       <button key={q} onClick={() => search(q)}>
                         {q}
                       </button>
@@ -1059,13 +1059,31 @@ export default function Home() {
                         {formatDate(e.checkedAt)}
                       </span>
                     </div>
-                    <button
-                      className="button"
-                      onClick={() => void openBook(e.book)}
-                    >
-                      查看目錄
-                      <ChevronRight size={15} />
-                    </button>
+                    {isConnectedSource(e.book.source) ? (
+                      <button
+                        className="button"
+                        onClick={() => void openBook(e.book)}
+                      >
+                        查看目錄
+                        <ChevronRight size={15} />
+                      </button>
+                    ) : (
+                      <button
+                        className="button"
+                        onClick={() => {
+                          update((l) => ({
+                            ...l,
+                            shelf: l.shelf.filter(
+                              (s) => s.book.id !== e.book.id,
+                            ),
+                          }));
+                          say("已移出書架");
+                        }}
+                      >
+                        <Trash2 size={15} />
+                        移出書架
+                      </button>
+                    )}
                   </div>
                 ))
               ) : (
@@ -1146,8 +1164,8 @@ export default function Home() {
                 <div>
                   <h3>從不同書海，走進同一座書架</h3>
                   <p>
-                    已接通 {SOURCES.length} 個來源，另收錄你提供的 60
-                    個候選書源。
+                    你的 {SOURCE_CATALOG.length} 個書源中，已接通{" "}
+                    {SOURCES.length} 個。
                   </p>
                 </div>
                 <span>{library.sources.length} 個啟用中</span>
@@ -1160,7 +1178,7 @@ export default function Home() {
                         className="source-logo"
                         style={{ background: s.color }}
                       >
-                        {s.id === "ws" ? "文" : s.id === "sf" ? "SF" : "ESJ"}
+                        {s.logo}
                       </span>
                       <button
                         className={`toggle ${library.sources.includes(s.id) ? "on" : ""}`}
@@ -1232,35 +1250,29 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="requested-grid">
-                  {REQUESTED_SOURCES.map((name, i) => ({
-                    name,
-                    i,
-                    f: SOURCE_FINDINGS[name],
-                  }))
+                  {SOURCE_CATALOG.map((source, i) => ({ ...source, i }))
                     .filter((s) => s.name.includes(sourceSearch))
-                    .map(({ name, i, f }) => (
+                    .map(({ name, i, connected, homepage }) => (
                       <div className="requested-source" key={name}>
                         <span className="source-index">
                           {String(i + 1).padStart(2, "0")}
                         </span>
                         <div>
                           <strong>{name}</strong>
-                          <span>{f?.note ?? "待確認網址與解析規則"}</span>
+                          <span>
+                            {connected
+                              ? "已接通搜尋、目錄與章節"
+                              : "待設定解析規則"}
+                          </span>
                         </div>
                         <span
-                          className={`status-pill ${f?.status ?? "pending"}`}
+                          className={`status-pill ${connected ? "ready" : "pending"}`}
                         >
-                          {f?.status === "ready"
-                            ? "可使用"
-                            : f?.status === "blocked"
-                              ? "存取受限"
-                              : f?.status === "partial"
-                                ? "部分驗證"
-                                : "待驗證"}
+                          {connected ? "可使用" : "待接通"}
                         </span>
-                        {f && (
+                        {homepage && (
                           <a
-                            href={f.url}
+                            href={homepage}
                             target="_blank"
                             rel="noreferrer"
                             aria-label={`開啟 ${name} 原站`}

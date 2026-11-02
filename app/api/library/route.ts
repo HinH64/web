@@ -1,34 +1,37 @@
-import { getBook, getChapter, search, SourceError } from "@/lib/reader/sources";
+import { sourceService, SourceError } from "@/lib/reader/sources/service";
 export async function GET(request: Request) {
   const p = new URL(request.url).searchParams;
   try {
     let result;
     if (p.get("action") === "book")
-      result = await getBook(p.get("id") ?? "", p.get("fresh") === "1");
-    else if (p.get("action") === "chapter")
-      result = await getChapter(p.get("id") ?? "", p.get("chapter") ?? "");
-    else if (p.get("action") === "search") {
-      const source = p.get("source");
-      if (source !== "sf" && source !== "ws" && source !== "esj")
-        throw new SourceError("請選擇有效的書源", 400);
-      result = await search(
-        source,
-        p.get("q") ?? "",
-        p.get("discover") === "1",
+      result = await sourceService.getBook(
+        p.get("id") ?? "",
+        p.get("fresh") === "1",
       );
-    } else throw new SourceError("不支援的操作", 400);
+    else if (p.get("action") === "chapter")
+      result = await sourceService.getChapter(
+        p.get("id") ?? "",
+        p.get("chapter") ?? "",
+      );
+    else if (p.get("action") === "search")
+      result = await sourceService.search(
+        p.get("source") ?? "",
+        p.get("q") ?? "",
+      );
+    else throw new SourceError("invalid_request", "不支援的操作");
     return Response.json(result, {
       headers: { "Cache-Control": "private, no-store" },
     });
   } catch (error) {
-    const message =
-      error instanceof SourceError
-        ? error.message
-        : "讀取來源時發生問題，請稍後再試";
+    const known = error instanceof SourceError;
+    if (!known) console.error("Unexpected source failure", error);
     return Response.json(
-      { error: message },
       {
-        status: error instanceof SourceError ? error.status : 502,
+        error: known ? error.message : "讀取來源時發生問題，請稍後再試",
+        kind: known ? error.kind : "http_error",
+      },
+      {
+        status: known ? error.status : 502,
         headers: { "Cache-Control": "no-store" },
       },
     );
