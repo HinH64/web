@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   createEntry,
   diffLibrary,
+  duplicateEntries,
   hasChanges,
+  mergeEntries,
   readBackup,
   readEntry,
   updateDiff,
@@ -14,6 +16,34 @@ import {
 import { EMPTY_LIBRARY } from "../lib/reader/types.ts";
 import { CONNECTED_SOURCE_IDS } from "../lib/reader/sources/registry.ts";
 import { sourceService } from "../lib/reader/sources/service.ts";
+
+test("one book kept twice on the shelf is found and merged into one entry", () => {
+  const edition = (id, title, author) => ({
+    id, source: id.split(":")[0], title, author, description: "", genre: "", url: "https://m.wfxs.tw/",
+  });
+  const entry = (book, addedAt, position, extra = {}) => ({
+    id: book.id, book, addedAt, chapterCount: 10, unreadIds: [], ...(position ? { position } : {}), ...extra,
+  });
+  const at = (updatedAt, chapterTitle) => ({ chapterId: "5", chapterTitle, paragraph: 2, offset: 0, updatedAt });
+  const older = entry(edition("wfxs:1", "凡人修仙傳", "忘語"), 100, at(500, "第五章"));
+  const newer = entry(edition("czbooks:9", "凡人修仙传(全本)", "忘语"), 300, at(900, "第九章"), {
+    otherEditions: [edition("hjwzw:2", "凡人修仙傳", "忘雨")], unreadIds: ["x"],
+  });
+  const viaEdition = entry(edition("hjwzw:2", "凡人修仙傳", "忘雨"), 200);
+  const other = entry(edition("wfxs:3", "凡人修仙傳", "另一位作者"), 50);
+  const unrelated = entry(edition("wfxs:4", "遮天", "辰東"), 60);
+  const groups = duplicateEntries([older, newer, viaEdition, other, unrelated]);
+  assert.deepEqual(groups.map((g) => g.map((e) => e.id)), [["wfxs:1", "czbooks:9", "hjwzw:2"]]);
+
+  const merged = mergeEntries(groups[0]);
+  assert.equal(merged.id, "czbooks:9", "the most recently read one is kept");
+  assert.equal(merged.book.id, "czbooks:9");
+  assert.equal(merged.position.chapterTitle, "第九章");
+  assert.deepEqual(merged.unreadIds, ["x"]);
+  assert.equal(merged.addedAt, 100, "added when the first copy was");
+  assert.deepEqual(merged.otherEditions.map((b) => b.id).sort(), ["hjwzw:2", "wfxs:1"]);
+  assert.deepEqual(duplicateEntries([merged, other, unrelated]), []);
+});
 
 test("update detection preserves unread chapters, ignores reordering and removed chapters", () => {
   assert.deepEqual(

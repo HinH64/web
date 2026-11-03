@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   authorsMatch,
   chapterNumber,
+  editionLabel,
   groupEditions,
   mapChapter,
   normalizeTitle,
@@ -36,6 +37,22 @@ test("authors match despite script and one wrong character, not otherwise", () =
   assert.ok(authorsMatch("微風小說網", "天蠶土豆"), "a site's own name is not an author");
   assert.ok(!authorsMatch("忘語", "天蠶土豆"));
   assert.ok(!authorsMatch("唐家三少", "天蠶土豆"));
+  assert.ok(authorsMatch("墨香銅臭 (靈異神怪 仙俠修真)", "墨香铜臭"), "a trailing note is not the name");
+});
+
+test("editions on the same site are told apart in the source menu", () => {
+  const same = (s) => s;
+  const reading = book("wfxs:1", "雲城", "小林");
+  const twin = book("wfxs:2", "雲城（精校）", "小林");
+  const other = book("czbooks:9", "雲城", "小林");
+  const all = [reading, twin, other];
+  assert.equal(editionLabel(other, all, same), "小說狂人");
+  assert.equal(editionLabel(twin, all, same), "微風小說 · 雲城（精校）");
+  assert.equal(editionLabel(other, all, same, 12), "小說狂人 · 12 章");
+  const byAuthor = [reading, book("wfxs:2", "雲城", "小林二")];
+  assert.equal(editionLabel(byAuthor[1], byAuthor, same), "微風小說 · 小林二");
+  const identical = [reading, book("wfxs:2", "雲城", "小林")];
+  assert.equal(editionLabel(identical[1], identical, same), "微風小說 · 版本 2");
 });
 
 test("search results group into one work per book", () => {

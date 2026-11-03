@@ -1,6 +1,6 @@
 # 拾光 · 中文閱讀器
 
-桌面優先的繁體中文 Web 閱讀器，在本機執行，以瀏覽器開啟。原始碼位於 `web/`，開發計畫見 [PLAN.md](PLAN.md)，實際書源驗證見 [SOURCE-VALIDATION.md](SOURCE-VALIDATION.md)。
+桌面優先的繁體中文 Web 閱讀器，在本機執行，以瀏覽器開啟。開發計畫見 [PLAN.md](PLAN.md)，實際書源驗證見 [SOURCE-VALIDATION.md](SOURCE-VALIDATION.md)。
 
 ## 第一版
 
@@ -14,7 +14,7 @@
 
 ## 本機執行
 
-需求：Node.js >= 22.13、npm。於 `web/` 內執行：
+需求：Node.js >= 22.13、npm。在此資料夾執行：
 
 ```powershell
 npm install
@@ -22,7 +22,7 @@ npm run build
 npm start
 ```
 
-日常使用開啟 <http://127.0.0.1:5174>。開發時改用 `npm run dev`，網址是 <http://127.0.0.1:5173>。書籍資料由 API 即時取自來源網站，首次讀取需網路；進度與快取保存在瀏覽器的 IndexedDB，並依網址分開，所以兩個網址的書架互不相通。Service Worker 只在正式建置啟用，離線功能應以 `npm start` 測試。
+日常使用開啟 <http://127.0.0.1:5174>。開發時改用 `npm run dev`，網址是 <http://127.0.0.1:5173>。書籍資料由 API 即時取自來源網站，首次讀取需網路；進度與快取保存在瀏覽器的 IndexedDB，並依網址分開，所以兩個網址的書架互不相通。
 
 兩個指令都只綁定本機，同一網路的其他裝置無法連線。API 沒有登入機制，開放給其他裝置或部署前須先加上存取控制。
 
@@ -31,14 +31,17 @@ npm run typecheck
 npm test
 npm run test:live
 npm run test:sources
+npm run test:e2e
 npm run lint
 ```
 
-`npm test` 使用固定樣本，可離線執行。`test:sources` 以 app 相同的服務測試所有已接通書源（搜尋 → 目錄 → 正文）並列出待接通的名稱，需要網路。網路來源可能變動或逾時。
+`npm test` 使用固定樣本，可離線執行。`test:sources` 以 app 相同的服務測試所有已接通書源（搜尋 → 目錄 → 正文）並列出未接通的名稱，需要網路。網路來源可能變動或逾時。
+
+`test:e2e` 需先 `npm run build`，並需要 Chrome 或 Edge（其他路徑以 `BROWSER` 指定）。它在空的 port 上啟動正式版，用暫時的無頭瀏覽器走一遍：找書 → 加入書架 → 讀下一章 → 重開恢復位置 → 離線讀快取 → 來源失敗時改用其他來源 → 備份還原 → 清除章節快取。使用真實書源，網站故障時可能失敗；不使用你瀏覽器的資料，結束後刪除。
 
 ## 新增書源
 
-1. 在 `web/lib/reader/sources/registry.ts` 以 `REQUESTED_SOURCES` 中的名稱新增設定：允許的網域與解析規則（URL 範本、CSS selector）。可用選項見 `web/lib/reader/sources/types.ts`。
+1. 在 `lib/reader/sources/registry.ts` 以 `REQUESTED_SOURCES` 中的名稱新增設定：允許的網域與解析規則（URL 範本、CSS selector）。可用選項見 `lib/reader/sources/types.ts`。
 2. 執行 `npm run test:sources`；在指令後加上書名可同時檢查各來源的重疊情況，例如 `npm run test:sources -- 凡人修仙傳`。
 
 規則已支援 POST 搜尋、GBK／Big5 查詢與頁面、獨立目錄頁、一章多頁、唯一結果直接進入書籍頁、依章節 ID 排序、正文清理及格式錯亂頁面的文字擷取。規則無法描述的網站，可寫自訂 adapter 並經 `createSourceService` 的 `adapters` 註冊。其餘程式不需修改。
@@ -47,21 +50,21 @@ npm run lint
 
 | 位置 | 用途 |
 | --- | --- |
-| `web/components/reader/app.tsx` | 版面、側欄與工作區路由 |
-| `web/components/reader/library-context.tsx` | 書架狀態、儲存、更新檢查 |
-| `web/components/reader/search-view.tsx`、`book-view.tsx`、`lists-view.tsx`、`settings-view.tsx` | 首頁與搜尋、書籍與目錄、更新與書籤、設定 |
-| `web/components/reader/reader-view.tsx` | 閱讀、段落定位、書籤、換源與來源失效切換 |
-| `web/lib/reader/route.ts`、`search-store.ts` | 網址路由、跨來源搜尋 |
-| `web/app/api/library/route.ts` | 書源 API |
-| `web/lib/reader/sources/service.ts` | 統一書源服務：識別碼驗證、快取、章節歸屬檢查 |
-| `web/lib/reader/sources/registry.ts` | 已接通書源的設定與解析規則 |
-| `web/lib/reader/sources/rule-engine.ts` | 依規則執行搜尋／目錄／正文解析 |
-| `web/lib/reader/sources/http.ts` | 請求層：網域白名單、轉址、限流、頁面解碼、錯誤分類；可替換傳輸方式 |
-| `web/lib/reader/sources/encoding.ts` | GBK／Big5 查詢字串編碼 |
-| `web/lib/reader/storage.ts` | IndexedDB：逐筆保存書架與書籤、舊資料遷移、分頁同步、章節快取 |
-| `web/lib/reader/reading.ts` | 更新差異、段落定位、紀錄與備份驗證、變更比對 |
-| `web/lib/reader/works.ts` | 按書名合併來源、選擇來源、跨來源對應章節 |
-| `web/lib/reader/requested-sources.ts` | 60 個書源名稱，即書源範圍 |
+| `components/reader/app.tsx` | 版面、側欄與工作區路由 |
+| `components/reader/library-context.tsx` | 書架狀態、儲存、更新檢查 |
+| `components/reader/search-view.tsx`、`book-view.tsx`、`lists-view.tsx`、`settings-view.tsx` | 首頁與搜尋、書籍與目錄、更新與書籤、設定 |
+| `components/reader/reader-view.tsx` | 閱讀、段落定位、書籤、換源與來源失效切換 |
+| `lib/reader/route.ts`、`search-store.ts` | 網址路由、跨來源搜尋 |
+| `app/api/library/route.ts` | 書源 API |
+| `lib/reader/sources/service.ts` | 統一書源服務：識別碼驗證、快取、章節歸屬檢查 |
+| `lib/reader/sources/registry.ts` | 已接通書源的設定與解析規則 |
+| `lib/reader/sources/rule-engine.ts` | 依規則執行搜尋／目錄／正文解析 |
+| `lib/reader/sources/http.ts` | 請求層：網域白名單、轉址、限流、頁面解碼、錯誤分類；可替換傳輸方式 |
+| `lib/reader/sources/encoding.ts` | GBK／Big5 查詢字串編碼 |
+| `lib/reader/storage.ts` | IndexedDB：逐筆保存書架與書籤、舊資料遷移、分頁同步、章節快取 |
+| `lib/reader/reading.ts` | 更新差異、段落定位、紀錄與備份驗證、變更比對 |
+| `lib/reader/works.ts` | 按書名合併來源、選擇來源、跨來源對應章節 |
+| `lib/reader/requested-sources.ts` | 60 個書源名稱，即書源範圍 |
 
 ## 目前界線
 

@@ -19,7 +19,7 @@ import { loadBook, loadChapter } from "@/lib/reader/storage";
 import type { Book, BookDetail, ChapterContent, Position } from "@/lib/reader/types";
 import { mapChapter } from "@/lib/reader/works";
 import { useLibrary } from "./library-context";
-import { errorMessage, IconButton, SettingsControls } from "./shared";
+import { editionLabel, errorMessage, IconButton, SettingsControls } from "./shared";
 
 const MAX_FALLBACK_SOURCES = 4;
 
@@ -603,7 +603,7 @@ function Reading({
                 </option>
                 {entry?.otherEditions?.map((e) => (
                   <option key={e.id} value={e.id}>
-                    {sourceName(e.source)}
+                    {editionLabel(e, [book, ...(entry.otherEditions ?? [])], convert)}
                   </option>
                 ))}
               </select>

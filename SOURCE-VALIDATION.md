@@ -1,6 +1,6 @@
 # 書源驗證紀錄
 
-書源範圍是 `web/lib/reader/requested-sources.ts` 的 60 個名稱。驗證一律透過 `npm run test:sources`，走與 app 相同的服務，結果只代表執行當下的環境與網路位置，不代表永久可用。
+書源範圍是 `lib/reader/requested-sources.ts` 的 60 個名稱。驗證一律透過 `npm run test:sources`，走與 app 相同的服務，結果只代表執行當下的環境與網路位置，不代表永久可用。
 
 ## 統計
 

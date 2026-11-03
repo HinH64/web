@@ -10,6 +10,7 @@ import {
   type ShelfEntry,
 } from "./types.ts";
 import { CONNECTED_SOURCE_IDS, SOURCES } from "./sources/registry.ts";
+import { authorsMatch, normalizeTitle } from "./works.ts";
 
 // Removed sources stay valid here so existing shelves, progress and backups
 // keep loading. Their books can still be read from cache or removed.
@@ -290,6 +291,53 @@ export function switchEdition(
   if (position) next.position = position;
   else delete next.position;
   return next;
+}
+
+const editionsOf = (e: ShelfEntry) => [e.book, ...(e.otherEditions ?? [])];
+const lastUsed = (e: ShelfEntry) => e.position?.updatedAt ?? e.addedAt;
+
+/**
+ * Shelf entries that are one book: a shared edition, or the same title with a
+ * matching author. Older shelves kept one entry per source, and a source found
+ * later can be added on its own. The reader confirms each group, since an
+ * unknown author matches anyone.
+ */
+export function duplicateEntries(shelf: ShelfEntry[]): ShelfEntry[][] {
+  const groups: ShelfEntry[][] = [];
+  for (const entry of shelf) {
+    const ids = new Set(editionsOf(entry).map((b) => b.id));
+    const title = normalizeTitle(entry.book.title);
+    const group = groups.find((g) =>
+      g.some(
+        (other) =>
+          editionsOf(other).some((b) => ids.has(b.id)) ||
+          (normalizeTitle(other.book.title) === title &&
+            authorsMatch(other.book.author, entry.book.author)),
+      ),
+    );
+    if (group) group.push(entry);
+    else groups.push([entry]);
+  }
+  return groups.filter((g) => g.length > 1);
+}
+
+/**
+ * One entry for a group of duplicates. The most recently read one is kept with
+ * its edition, position and unread marks; the others' editions become sources
+ * to switch to. Their own positions are dropped, since only one can apply.
+ */
+export function mergeEntries(group: ShelfEntry[]): ShelfEntry {
+  const [keep] = [...group].sort((a, b) => lastUsed(b) - lastUsed(a));
+  const others = new Map<string, Book>();
+  for (const entry of [keep, ...group.filter((e) => e !== keep)])
+    for (const book of editionsOf(entry))
+      if (book.id !== keep.book.id && !others.has(book.id))
+        others.set(book.id, book);
+  return {
+    ...keep,
+    otherEditions: [...others.values()],
+    addedAt: Math.min(...group.map((e) => e.addedAt)),
+  };
 }
 
 export type LibraryChanges = {

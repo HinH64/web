@@ -1,4 +1,6 @@
-import { Converter } from "opencc-js";
+// Only traditional to simplified, about 110 KB, not the 1.1 MB other direction.
+import { Converter } from "opencc-js/t2cn";
+import { sourceName } from "./sources/registry.ts";
 import type { Book, BookDetail, Chapter } from "./types.ts";
 
 /** One book, however many sources carry it. */
@@ -32,8 +34,11 @@ const UNKNOWN_AUTHORS = new Set([
 ]);
 
 export function normalizeAuthor(author: string) {
+  // A trailing note in brackets, such as a site's categories, is not the name.
   const name = keepWordChars(
-    toSimplified(author).replace(/^\s*作\s*者\s*[:：]/, ""),
+    toSimplified(author)
+      .replace(/^\s*作\s*者\s*[:：]/, "")
+      .replace(/\s*[（(][^）)]*[）)]\s*$/, ""),
   );
   return UNKNOWN_AUTHORS.has(name) ? "" : name;
 }
@@ -127,6 +132,35 @@ export function rankEditions(editions: BookDetail[]) {
         x.index - y.index,
     )
     .map((x) => x.book);
+}
+
+/**
+ * Names an edition in a source menu. A site can carry several editions of one
+ * book, so those are told apart by title, then author, then their order.
+ * `all` includes the edition being read, so that it counts as a twin too.
+ */
+export function editionLabel(
+  edition: Book,
+  all: Book[],
+  convert: (text: string) => string,
+  chapters?: number,
+) {
+  const twins = all.filter((e) => e.source === edition.source);
+  let which = "";
+  if (twins.length > 1)
+    which =
+      new Set(twins.map((e) => e.title)).size === twins.length
+        ? convert(edition.title)
+        : new Set(twins.map((e) => e.author)).size === twins.length
+          ? convert(edition.author)
+          : `版本 ${twins.findIndex((e) => e.id === edition.id) + 1}`;
+  return [
+    sourceName(edition.source),
+    which,
+    chapters === undefined ? "" : `${chapters} 章`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 const DIGITS: Record<string, number> = {

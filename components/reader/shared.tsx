@@ -1,17 +1,41 @@
 "use client";
 import type { ReactNode } from "react";
-import { Converter } from "opencc-js";
+import { Converter } from "opencc-js/t2cn";
 import type { Settings } from "@/lib/reader/types";
 
-const traditional = Converter({ from: "cn", to: "tw" });
-const simplified = Converter({ from: "tw", to: "cn" });
+export type Convert = (text: string) => string;
 
-export const converterFor = (script: Settings["script"]) =>
+const simplified: Convert = Converter({ from: "tw", to: "cn" });
+const unchanged: Convert = (text) => text;
+
+let traditional: Promise<Convert> | undefined;
+
+/**
+ * The simplified-to-traditional dictionary is about 1.1 MB, ten times the
+ * other direction, so it is fetched only when traditional text is shown.
+ */
+export function loadTraditional() {
+  traditional ??= import("opencc-js/cn2t")
+    .then(({ Converter }) => Converter({ from: "cn", to: "tw" }))
+    .catch((error) => {
+      traditional = undefined; // so that a later attempt can try again
+      throw error;
+    });
+  return traditional;
+}
+
+/** Until the traditional dictionary arrives, text is shown as it is. */
+export const converterFor = (
+  script: Settings["script"],
+  toTraditional?: Convert,
+): Convert =>
   script === "tw"
-    ? traditional
+    ? (toTraditional ?? unchanged)
     : script === "cn"
       ? simplified
-      : (text: string) => text;
+      : unchanged;
+
+export { editionLabel } from "@/lib/reader/works";
 
 export const errorMessage = (e: unknown) =>
   e instanceof Error ? e.message : "暫時無法讀取，請稍後重試";

@@ -8,7 +8,7 @@ import { loadBook } from "@/lib/reader/storage";
 import type { Book, BookDetail } from "@/lib/reader/types";
 import { mapChapter, rankEditions } from "@/lib/reader/works";
 import { useLibrary } from "./library-context";
-import { errorMessage, formatDate, IconButton } from "./shared";
+import { editionLabel, errorMessage, formatDate, IconButton } from "./shared";
 
 // How long to wait for slower sources after the first has answered.
 const SETTLE_MS = 5000;
@@ -257,15 +257,16 @@ export function BookView({ id }: { id: string }) {
             <option value="">
               {others.length ? "換到其他來源" : "目前沒有其他來源"}
             </option>
-            {others.map((e) => {
-              const detail = ranked.find((x) => x.id === e.id);
-              return (
-                <option key={e.id} value={e.id}>
-                  {sourceName(e.source)}
-                  {detail ? ` · ${detail.chapters.length} 章` : ""}
-                </option>
-              );
-            })}
+            {others.map((e) => (
+              <option key={e.id} value={e.id}>
+                {editionLabel(
+                  e,
+                  [book, ...others],
+                  convert,
+                  ranked.find((x) => x.id === e.id)?.chapters.length,
+                )}
+              </option>
+            ))}
           </select>
           <button type="button" className="text-button" disabled={switching} onClick={() => void findMore()}>
             {switching ? "處理中" : "尋找其他來源"}

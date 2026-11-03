@@ -38,7 +38,12 @@ import {
   type Settings,
   type ShelfEntry,
 } from "@/lib/reader/types";
-import { converterFor, errorMessage } from "./shared";
+import {
+  converterFor,
+  errorMessage,
+  loadTraditional,
+  type Convert,
+} from "./shared";
 
 const CHECK_INTERVAL_MS = 15 * 60_000;
 
@@ -135,7 +140,11 @@ function subscribeOnline(listener: () => void) {
 export function LibraryProvider({ children }: { children: ReactNode }) {
   const [library, setLibrary] = useState<Library>(EMPTY_LIBRARY);
   const lib = useRef(library);
-  const [ready, setReady] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [traditional, setTraditional] = useState<{
+    convert?: Convert;
+    settled: boolean;
+  }>({ settled: false });
   const [storageError, setStorageError] = useState("");
   const [storageLocked, setStorageLocked] = useState(false);
   const [skippedRecords, setSkippedRecords] = useState(0);
@@ -222,8 +231,31 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
           "無法讀取本機資料。為免覆蓋原有紀錄，目前的變更不會保存，請重新整理頁面再試。",
         );
       })
-      .finally(() => setReady(true));
+      .finally(() => setLoaded(true));
   }, []);
+
+  // Fetched once the stored setting is known, and only for traditional.
+  const script = library.settings.script;
+  useEffect(() => {
+    if (!loaded || script !== "tw" || traditional.convert) return;
+    let live = true;
+    loadTraditional()
+      .then((convert) => live && setTraditional({ convert, settled: true }))
+      .catch(() => {
+        if (!live) return;
+        setTraditional({ settled: true });
+        say("無法載入繁體字典，暫時顯示原文");
+      });
+    return () => {
+      live = false;
+    };
+  }, [loaded, script, traditional.convert, say]);
+  // The first view waits for the dictionary, so that text does not change
+  // script in front of the reader. Once shown, it stays: switching to
+  // traditional later must not unmount the page being read.
+  const [ready, setReady] = useState(false);
+  if (!ready && loaded && (script !== "tw" || traditional.settled))
+    setReady(true);
 
   useEffect(() => {
     // Another tab changed something. Read it again, and retry if this tab wrote
@@ -438,8 +470,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   }, [ready, library.settings.autoCheck, checkUpdates]);
 
   const convert = useMemo(
-    () => converterFor(library.settings.script),
-    [library.settings.script],
+    () => converterFor(script, traditional.convert),
+    [script, traditional.convert],
   );
 
   const value: ContextValue = {

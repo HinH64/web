@@ -1,6 +1,11 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { enabledSources, readBackup } from "@/lib/reader/reading";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  duplicateEntries,
+  enabledSources,
+  mergeEntries,
+  readBackup,
+} from "@/lib/reader/reading";
 import { SOURCE_CATALOG, SOURCES, sourceName } from "@/lib/reader/sources/registry";
 import {
   cacheCount,
@@ -24,8 +29,20 @@ const SHORTCUTS = [
 ];
 
 export function SettingsView() {
-  const { library, setSettings, update, say, storageLocked } = useLibrary();
+  const { library, setSettings, update, say, storageLocked, convert } = useLibrary();
   const settings = library.settings;
+  const duplicates = useMemo(() => duplicateEntries(library.shelf), [library.shelf]);
+
+  const merge = (group: typeof duplicates[number]) => {
+    const merged = mergeEntries(group);
+    update((l) => ({
+      ...l,
+      shelf: l.shelf.flatMap((e) =>
+        e.id === merged.id ? [merged] : group.some((g) => g.id === e.id) ? [] : [e],
+      ),
+    }));
+    say(`已合併《${convert(merged.book.title)}》`);
+  };
   const [cacheSize, setCacheSize] = useState(0);
   const [pending, setPending] = useState<ReturnType<typeof readBackup> | null>(null);
   const [testing, setTesting] = useState<Record<string, string>>({});
@@ -189,6 +206,36 @@ export function SettingsView() {
             </div>
           </div>
         )}
+        {duplicates.length > 0 && (
+          <div className="confirm">
+            <p>
+              書架上有 {duplicates.length} 本書重複出現。合併後保留最近閱讀的進度，其餘的來源可在閱讀時切換。
+            </p>
+            <ul className="duplicates">
+              {duplicates.map((group) => (
+                <li key={group.map((e) => e.id).join("|")}>
+                  <div>
+                    <strong>{convert(group[0].book.title)}</strong>
+                    {group.map((e) => (
+                      <span key={e.id}>
+                        {sourceName(e.book.source)} · {convert(e.book.author)}
+                        {e.position ? ` · ${convert(e.position.chapterTitle)}` : " · 未開始"}
+                      </span>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={storageLocked}
+                    onClick={() => merge(group)}
+                  >
+                    合併
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="row-line">
           <span>章節快取 {cacheSize} / 60 章</span>
           <button
@@ -248,7 +295,7 @@ export function SettingsView() {
                 ) : (
                   s.name
                 )}
-                <small>{s.connected ? "可使用" : "待接通"}</small>
+                <small>{s.connected ? "可使用" : "未接通"}</small>
               </li>
             ))}
           </ul>

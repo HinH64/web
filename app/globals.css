@@ -878,6 +878,34 @@ ul {
   margin: 0;
 }
 
+.duplicates {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.duplicates li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.duplicates li > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.duplicates span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .row-line {
   display: flex;
   justify-content: space-between;

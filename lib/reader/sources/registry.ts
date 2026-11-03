@@ -86,13 +86,14 @@ const CONFIGS: Partial<Record<RequestedSourceName, SourceConfig>> = {
           pattern: "/xiaoshuo/(\\d+)/",
         },
         title: { selector: "a.book-title" },
-        author: { selector: ".author" },
+        // Some books carry their categories, as in 墨香銅臭 (靈異神怪 仙俠修真).
+        author: { selector: ".author", strip: "\\s*[（(][^）)]*[）)]\\s*$" },
         cover: { selector: "img", attr: "src" },
       },
       book: {
         url: "https://m.wfxs.tw/xiaoshuo/{bookKey}/",
         title: { selector: "meta[property$=book_name]", attr: "content" },
-        author: { selector: "meta[property$=author]", attr: "content" },
+        author: { selector: "meta[property$=author]", attr: "content", strip: "\\s*[（(][^）)]*[）)]\\s*$" },
         status: { selector: "meta[property$=status]", attr: "content" },
         cover: { selector: 'meta[property="og:image"]', attr: "content" },
         chapters: {
