@@ -7,6 +7,7 @@ export type Route =
   | { name: "search"; query: string }
   | { name: "book"; id: string }
   | { name: "read"; id: string; chapter?: string; paragraph?: number }
+  | { name: "ranks"; rank?: string; category?: number }
   | { name: "updates" }
   | { name: "bookmarks" }
   | { name: "settings" };
@@ -28,6 +29,14 @@ export function parseRoute(hash: string): Route {
   const book = p.get("book");
   if (book) return { name: "book", id: book };
   if (p.has("search")) return { name: "search", query: p.get("search") ?? "" };
+  if (p.has("ranks")) {
+    const category = Number(p.get("category"));
+    return {
+      name: "ranks",
+      ...(p.get("ranks") ? { rank: p.get("ranks")! } : {}),
+      ...(p.get("category") && Number.isInteger(category) ? { category } : {}),
+    };
+  }
   if (p.has("updates")) return { name: "updates" };
   if (p.has("bookmarks")) return { name: "bookmarks" };
   if (p.has("settings")) return { name: "settings" };
@@ -42,6 +51,9 @@ export function routeHash(route: Route) {
     if (route.paragraph !== undefined) p.set("p", String(route.paragraph));
   } else if (route.name === "book") p.set("book", route.id);
   else if (route.name === "search") p.set("search", route.query);
-  else if (route.name !== "home") p.set(route.name, "");
+  else if (route.name === "ranks") {
+    p.set("ranks", route.rank ?? "");
+    if (route.category !== undefined) p.set("category", String(route.category));
+  } else if (route.name !== "home") p.set(route.name, "");
   return p.toString();
 }

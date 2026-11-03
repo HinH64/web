@@ -481,7 +481,8 @@ ul {
   border-bottom: 1px solid var(--line);
 }
 
-.rows > li > button,
+/* Only the row itself: a row can end with a smaller button of its own. */
+.rows > li > button:first-child,
 .row-static {
   display: flex;
   align-items: baseline;
@@ -491,7 +492,7 @@ ul {
   border-radius: 6px;
 }
 
-.rows > li > button:hover {
+.rows > li > button:first-child:hover {
   background: var(--hover);
 }
 
@@ -601,6 +602,96 @@ ul {
   margin: -8px 0 8px;
   color: var(--muted);
   font-size: 13px;
+}
+
+/* Rankings */
+
+.ranks .page-title select {
+  flex: none;
+}
+
+.rank-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: -4px 0 12px;
+}
+
+.rank-tabs button {
+  padding: 4px 10px;
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+.rank-tabs button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.rank-tabs button[aria-pressed="true"] {
+  background: var(--selected);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.rank-loading {
+  padding: 48px 0;
+}
+
+.rank-rows > li > button:first-child {
+  align-items: flex-start;
+  flex-wrap: nowrap;
+}
+
+.rank-rows .rank-num {
+  flex: none;
+  width: 2ch;
+  text-align: right;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  overflow: visible;
+}
+
+.rank-rows .rank-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  color: var(--text);
+  font-size: inherit;
+}
+
+.rank-rows .rank-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: inherit;
+  font-size: inherit;
+}
+
+.rank-rows .rank-head strong {
+  flex: none;
+  max-width: 70%;
+}
+
+.rank-rows .rank-intro {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
+}
+
+.rank-rows small {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.rank-rows .text-button {
+  flex: none;
+  padding: 0 8px;
 }
 
 /* Book */

@@ -13,6 +13,9 @@ test("every route survives the URL, including ids with slashes and spaces", () =
     { name: "read", id: "piaotia:0/760" },
     { name: "read", id: "shucheng51:kehuan/santi/santi1", chapter: "174" },
     { name: "read", id: "esj:1", chapter: "9", paragraph: 12 },
+    { name: "ranks" },
+    { name: "ranks", rank: "sign", category: 9 },
+    { name: "ranks", rank: "rec", category: -1 },
     { name: "updates" },
     { name: "bookmarks" },
     { name: "settings" },
@@ -33,6 +36,7 @@ test("bad or unknown hashes fall back safely", () => {
   assert.deepEqual(parseRoute("#nonsense=1"), { name: "home" });
   assert.deepEqual(parseRoute("#read=esj:1&p=-3"), { name: "read", id: "esj:1" });
   assert.deepEqual(parseRoute("#read=esj:1&p=abc"), { name: "read", id: "esj:1" });
+  assert.deepEqual(parseRoute("#ranks=rec&category=abc"), { name: "ranks", rank: "rec" });
 });
 
 const edition = (id, title = "書") => ({

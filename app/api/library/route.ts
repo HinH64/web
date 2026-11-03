@@ -1,3 +1,4 @@
+import { rankService } from "@/lib/reader/rank-service";
 import { sourceService, SourceError } from "@/lib/reader/sources/service";
 export async function GET(request: Request) {
   const p = new URL(request.url).searchParams;
@@ -17,6 +18,11 @@ export async function GET(request: Request) {
       result = await sourceService.search(
         p.get("source") ?? "",
         p.get("q") ?? "",
+      );
+    else if (p.get("action") === "rank")
+      result = await rankService.getRank(
+        p.get("rank") ?? "",
+        Number(p.get("category") ?? -1),
       );
     else throw new SourceError("invalid_request", "不支援的操作");
     return Response.json(result, {

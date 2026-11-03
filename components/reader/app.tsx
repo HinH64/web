@@ -8,12 +8,14 @@ import {
   PanelLeft,
   Search,
   Settings2,
+  Trophy,
   WifiOff,
   X,
 } from "lucide-react";
 import { BookView } from "./book-view";
 import { BookmarksView, UpdatesView } from "./lists-view";
 import { isPhoneWidth, LibraryProvider, useLibrary } from "./library-context";
+import { RanksView } from "./ranks-view";
 import { HomeView, SearchView } from "./search-view";
 import { ReaderView } from "./reader-view";
 import { SettingsView } from "./settings-view";
@@ -114,6 +116,8 @@ function Shell() {
             chapter={route.chapter}
             paragraph={route.paragraph}
           />
+        ) : route.name === "ranks" ? (
+          <RanksView rank={route.rank} category={route.category} />
         ) : route.name === "updates" ? (
           <UpdatesView />
         ) : route.name === "bookmarks" ? (
@@ -209,6 +213,7 @@ function Sidebar() {
   }, [library.shelf, filter, convert]);
 
   const nav = [
+    { name: "ranks", label: "榜單", icon: Trophy, count: 0 },
     { name: "updates", label: "更新", icon: Bell, count: unread },
     { name: "bookmarks", label: "書籤", icon: BookmarkIcon, count: 0 },
     { name: "settings", label: "設定", icon: Settings2, count: 0 },

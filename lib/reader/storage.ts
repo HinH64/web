@@ -231,6 +231,12 @@ async function fetchAPI<T>(params: Record<string, string>): Promise<T> {
 }
 export const searchBooks = (source: string, q: string) =>
   fetchAPI<import("./types").Book[]>({ action: "search", source, q });
+export const loadRank = (rank: string, category: number) =>
+  fetchAPI<import("./rank").RankList>({
+    action: "rank",
+    rank,
+    category: String(category),
+  });
 export async function loadBook(id: string, fresh = false): Promise<BookDetail> {
   try {
     const result = await fetchAPI<BookDetail>({

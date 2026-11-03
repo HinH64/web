@@ -10,7 +10,7 @@ import {
   type ShelfEntry,
 } from "./types.ts";
 import { CONNECTED_SOURCE_IDS, SOURCES } from "./sources/registry.ts";
-import { authorsMatch, normalizeTitle } from "./works.ts";
+import { sameWork } from "./works.ts";
 
 // Removed sources stay valid here so existing shelves, progress and backups
 // keep loading. Their books can still be read from cache or removed.
@@ -306,13 +306,11 @@ export function duplicateEntries(shelf: ShelfEntry[]): ShelfEntry[][] {
   const groups: ShelfEntry[][] = [];
   for (const entry of shelf) {
     const ids = new Set(editionsOf(entry).map((b) => b.id));
-    const title = normalizeTitle(entry.book.title);
     const group = groups.find((g) =>
       g.some(
         (other) =>
           editionsOf(other).some((b) => ids.has(b.id)) ||
-          (normalizeTitle(other.book.title) === title &&
-            authorsMatch(other.book.author, entry.book.author)),
+          sameWork(other.book, entry.book),
       ),
     );
     if (group) group.push(entry);

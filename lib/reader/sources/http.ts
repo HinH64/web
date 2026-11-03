@@ -65,7 +65,9 @@ export function createHttp({
     return new SourceError("http_error", `來源回應 ${status}，請稍後重試`);
   }
 
-  function forSource(config: SourceConfig): SourceHttp {
+  function forSource(
+    config: Pick<SourceConfig, "hosts" | "minIntervalMs" | "timeoutMs">,
+  ): SourceHttp {
     const allowed = new Set(config.hosts);
     const isAllowed = (u: URL) =>
       u.protocol === "https:" &&

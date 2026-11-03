@@ -1,6 +1,6 @@
 import { searchBooks } from "./storage";
 import type { Book } from "./types";
-import { groupEditions, sortWorks, type Work } from "./works";
+import { groupEditions, sameWork, sortWorks, type Work } from "./works";
 
 export type SearchState = {
   query: string;
@@ -67,6 +67,50 @@ export function startSearch(query: string, sources: string[]) {
         save(state);
       },
     );
+}
+
+export type Lookup = { work?: Work; results: number };
+
+/**
+ * Searches the sources for one book named elsewhere, such as on a ranking.
+ * Once it is found, slower sources get a short while longer to add editions,
+ * so that a source near its timeout does not hold up opening the book.
+ */
+export function lookUpWork(
+  wanted: { title: string; author: string },
+  sources: string[],
+  { signal, settleMs = 3000 }: { signal?: AbortSignal; settleMs?: number } = {},
+) {
+  return new Promise<Lookup>((resolve) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let done = false;
+    const current = (): Lookup => {
+      const works = getSearch(wanted.title, sources)?.works ?? [];
+      return { work: works.find((w) => sameWork(w, wanted)), results: works.length };
+    };
+    const finish = (result: Lookup) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      unsubscribe();
+      signal?.removeEventListener("abort", abort);
+      resolve(result);
+    };
+    const abort = () => finish({ results: 0 });
+    const check = () => {
+      const state = getSearch(wanted.title, sources);
+      if (!state) return;
+      const found = current();
+      if (state.pending === 0) finish(found);
+      else if (found.work && !timer)
+        timer = setTimeout(() => finish(current()), settleMs);
+    };
+    const unsubscribe = subscribeSearch(check);
+    if (signal?.aborted) return abort();
+    signal?.addEventListener("abort", abort);
+    startSearch(wanted.title, sources);
+    check();
+  });
 }
 
 /** The work a search result belongs to, when it came from a search this session. */

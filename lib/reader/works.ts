@@ -70,15 +70,19 @@ export function authorsMatch(a: string, b: string) {
   return Math.min(x.length, y.length) >= 2 && editDistance(x, y) <= 1;
 }
 
+type Named = { title: string; author: string };
+
+/** Whether two listings name the same book, on any site or ranking. */
+export const sameWork = (a: Named, b: Named) =>
+  normalizeTitle(a.title) === normalizeTitle(b.title) &&
+  authorsMatch(a.author, b.author);
+
 /** Groups search results into works, keeping the order they first appeared in. */
 export function groupEditions(books: Book[]): Work[] {
   const works: Work[] = [];
   for (const book of books) {
     const title = normalizeTitle(book.title);
-    const existing = works.find(
-      (w) =>
-        normalizeTitle(w.title) === title && authorsMatch(w.author, book.author),
-    );
+    const existing = works.find((w) => sameWork(w, book));
     if (existing) {
       existing.editions.push(book);
       if (!normalizeAuthor(existing.author) && normalizeAuthor(book.author))

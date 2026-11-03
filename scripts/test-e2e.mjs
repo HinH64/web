@@ -1,4 +1,4 @@
-// End-to-end test of the main reading flow, on the production build, in a
+// End-to-end test of the main reading flow and the rankings, on the production build, in a
 // throwaway headless Chrome or Edge. Uses real sources, so it needs a network,
 // and a site being down can fail it. Run `npm run build` first.
 //   npm run test:e2e
@@ -338,6 +338,34 @@ try {
     await click(".row-line button", "清除");
     await waitFor(`document.querySelector('.row-line')?.textContent.includes('章節快取 0 /')`, "an empty cache", 10_000);
     return `${before} → 0`;
+  });
+
+  await step("a ranked book opens from the connected sources", async () => {
+    const rows = "document.querySelectorAll('.rank-rows li')";
+    await evaluate("location.hash = 'ranks'");
+    await waitFor(`${rows}.length >= 10`, "the monthly ranking", 30_000);
+    await click(".rank-tabs button", "暢銷");
+    await waitFor(`location.hash.includes('ranks=hotsales') && ${rows}.length >= 10`, "another ranking", 30_000);
+    await evaluate(`(() => {
+      const select = document.querySelector('.ranks select');
+      select.value = '21';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    await waitFor(`location.hash.includes('category=21') && ${rows}.length >= 10`, "one category", 30_000);
+    // Not every ranked book is on a connected source, so try them in order.
+    const missing = [];
+    for (let i = 0; i < 8; i++) {
+      const row = `${rows}[${i}]`;
+      const title = await evaluate(`${row}.querySelector('strong').textContent`);
+      await evaluate(`${row}.querySelector('button').click()`);
+      await waitFor(`location.hash.includes('book=') || ${row}?.textContent.includes('暫無來源')`, `${title} to open or have no source`, 60_000);
+      if ((await hash()).includes("book=")) {
+        await waitFor(`document.querySelectorAll('.chapters button').length > 10`, "its catalog");
+        return `${title}, ${await text(".meta")}${missing.length ? `; no source for ${missing.join("、")}` : ""}`;
+      }
+      missing.push(title);
+    }
+    throw new Error(`none of the first 8 is on a connected source: ${missing.join("、")}`);
   });
 } catch {
   // Reported by step().

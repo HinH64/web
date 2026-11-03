@@ -6,6 +6,7 @@
 
 - 統一書源服務：所有網站走同一套請求、解析、快取與錯誤分類；目前接通 20 個來源，見 [SOURCE-VALIDATION.md](SOURCE-VALIDATION.md)。
 - 依書名／作者搜尋、完整章節目錄、加入書架、連續捲動閱讀。
+- 起點榜單：9 個榜、15 個分類，每榜前 20 名；點選後在已接通的來源中找書名及作者相符的書。
 - 本機閱讀位置、書籤、字級／行距／寬度／字體／繁簡設定、三種閱讀背景。
 - 手動與使用期間每 15 分鐘目錄更新檢查；檢查失敗保留上次成功結果。
 - 下一章預載、最多 60 章快取；離線時可讀已快取的章節。
@@ -37,7 +38,7 @@ npm run lint
 
 `npm test` 使用固定樣本，可離線執行。`test:sources` 以 app 相同的服務測試所有已接通書源（搜尋 → 目錄 → 正文）並列出未接通的名稱，需要網路。網路來源可能變動或逾時。
 
-`test:e2e` 需先 `npm run build`，並需要 Chrome 或 Edge（其他路徑以 `BROWSER` 指定）。它在空的 port 上啟動正式版，用暫時的無頭瀏覽器走一遍：找書 → 加入書架 → 讀下一章 → 重開恢復位置 → 離線讀快取 → 來源失敗時改用其他來源 → 備份還原 → 清除章節快取。使用真實書源，網站故障時可能失敗；不使用你瀏覽器的資料，結束後刪除。
+`test:e2e` 需先 `npm run build`，並需要 Chrome 或 Edge（其他路徑以 `BROWSER` 指定）。它在空的 port 上啟動正式版，用暫時的無頭瀏覽器走一遍：找書 → 加入書架 → 讀下一章 → 重開恢復位置 → 離線讀快取 → 來源失敗時改用其他來源 → 備份還原 → 清除章節快取 → 從榜單開啟一本書。使用真實書源及起點榜單，網站故障時可能失敗；不使用你瀏覽器的資料，結束後刪除。
 
 ## 新增書源
 
@@ -53,9 +54,11 @@ npm run lint
 | `components/reader/app.tsx` | 版面、側欄與工作區路由 |
 | `components/reader/library-context.tsx` | 書架狀態、儲存、更新檢查 |
 | `components/reader/search-view.tsx`、`book-view.tsx`、`lists-view.tsx`、`settings-view.tsx` | 首頁與搜尋、書籍與目錄、更新與書籤、設定 |
+| `components/reader/ranks-view.tsx` | 榜單，以及點選後在已接通來源找書 |
+| `lib/reader/rank.ts`、`rank-service.ts` | 榜單與分類清單；讀取並解析起點手機版榜單、快取 |
 | `components/reader/reader-view.tsx` | 閱讀、段落定位、書籤、換源與來源失效切換 |
 | `lib/reader/route.ts`、`search-store.ts` | 網址路由、跨來源搜尋 |
-| `app/api/library/route.ts` | 書源 API |
+| `app/api/library/route.ts` | 書源及榜單 API |
 | `lib/reader/sources/service.ts` | 統一書源服務：識別碼驗證、快取、章節歸屬檢查 |
 | `lib/reader/sources/registry.ts` | 已接通書源的設定與解析規則 |
 | `lib/reader/sources/rule-engine.ts` | 依規則執行搜尋／目錄／正文解析 |
@@ -69,6 +72,8 @@ npm run lint
 ## 目前界線
 
 書架與紀錄依瀏覽器保存，尚未加入帳戶與跨裝置同步。沒有關閉後的背景排程、推播、TTS、TXT / EPUB 匯入或 `.ibs` 通用匯入。同一本書只佔書架一格；換來源時依章節名稱對應，無法確定時由使用者選擇章節。
+
+榜單只有起點男生網各榜前 20 名：之後的名次及女生網都拒絕這個 app 讀取。
 
 書源只讀取公開可取得的文字。付費、需登入、外連或網站驗證的章節提供原站入口。新增來源須完成實際取用驗證後才加入可搜尋列表。
 
