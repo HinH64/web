@@ -246,15 +246,26 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     document.documentElement.dataset.theme = library.settings.theme;
   }, [library.settings.theme]);
 
+  // The app is no longer a PWA. Browsers that installed its old worker keep it
+  // until told otherwise, so remove it and its cached files. Chapters are in
+  // IndexedDB, not here, and are not touched.
   useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-    if (process.env.NODE_ENV === "production")
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
-    // A worker left on the dev port would serve stale code from its cache.
-    else
+    if ("serviceWorker" in navigator)
       void navigator.serviceWorker
         .getRegistrations()
-        .then((all) => all.forEach((r) => void r.unregister()));
+        .then((all) => all.forEach((r) => void r.unregister()))
+        .catch(() => {});
+    if ("caches" in window)
+      void caches
+        .keys()
+        .then((keys) =>
+          Promise.all(
+            keys
+              .filter((k) => k.startsWith("shiguang-"))
+              .map((k) => caches.delete(k)),
+          ),
+        )
+        .catch(() => {});
   }, []);
 
   const setSettings = useCallback(
