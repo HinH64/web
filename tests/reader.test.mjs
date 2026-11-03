@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  createEntry,
+  diffLibrary,
+  hasChanges,
+  readBackup,
+  readEntry,
   updateDiff,
   visibleParagraph,
   validateLibrary,
@@ -22,6 +27,12 @@ test("update detection preserves unread chapters, ignores reordering and removed
   assert.deepEqual(updateDiff([], [{ id: "1" }]), []);
   assert.deepEqual(updateDiff(["1"], [{ id: "1" }], []), []);
 });
+test("without a stored catalog, new chapters are found from the chapter count", () => {
+  const chapters = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  assert.deepEqual(updateDiff([], chapters, [], 2), ["c"]);
+  assert.deepEqual(updateDiff([], chapters, ["a"], 3), ["a"]);
+  assert.deepEqual(updateDiff([], chapters, [], 0), [], "a new book has nothing unread");
+});
 test("paragraph anchor is stable when text above viewport changes height", () => {
   assert.deepEqual(
     visibleParagraph(
@@ -36,9 +47,9 @@ test("paragraph anchor is stable when text above viewport changes height", () =>
   assert.deepEqual(visibleParagraph([], 110), { paragraph: 0, offset: 0 });
 });
 test("backups reject malformed records and clamp display settings", () => {
-  assert.equal(validateLibrary(EMPTY_LIBRARY).version, 1);
+  assert.equal(validateLibrary(EMPTY_LIBRARY).version, 2);
   assert.throws(() =>
-    validateLibrary({ version: 2, shelf: [], bookmarks: [] }),
+    validateLibrary({ version: 3, shelf: [], bookmarks: [] }),
   );
   assert.throws(() =>
     validateLibrary({
@@ -73,9 +84,12 @@ const shelfEntry = (id, source, url) => ({
     description: "",
     genre: "g",
     url,
+    chapters: [{ id: "1", title: "c" }],
+    checkedAt: 1,
+    firstChapter: "1",
   },
   addedAt: 1,
-  chapterIds: ["1"],
+  chapterIds: ["0", "1"],
   unreadIds: [],
   position: {
     chapterId: "1",
@@ -85,9 +99,82 @@ const shelfEntry = (id, source, url) => ({
     updatedAt: 1,
   },
 });
+test("an older library moves its catalogs out of the shelf and keeps everything else", () => {
+  const { library, catalogs } = readBackup({
+    version: 1,
+    shelf: [shelfEntry("esj:1", "esj", "https://www.esjzone.cc/detail/1.html")],
+    bookmarks: [],
+    sources: ["esj"],
+  });
+  const [entry] = library.shelf;
+  assert.equal(library.version, 2);
+  assert.equal(entry.id, "esj:1");
+  assert.equal(entry.chapterCount, 2);
+  assert.equal(entry.book.chapters, undefined, "the catalog left the shelf");
+  assert.equal(entry.chapterIds, undefined);
+  assert.equal(entry.position.paragraph, 3);
+  assert.equal(entry.position.chapterIndex, 1);
+  assert.equal(entry.position.bookId, "esj:1");
+  assert.deepEqual(catalogs, { "esj:1": ["0", "1"] });
+});
+test("a library in the current form reads back unchanged", () => {
+  const { library } = readBackup({
+    version: 1,
+    shelf: [shelfEntry("esj:1", "esj", "https://www.esjzone.cc/detail/1.html")],
+    bookmarks: [],
+  });
+  const again = readBackup(JSON.parse(JSON.stringify(library)));
+  assert.deepEqual(again.library.shelf, library.shelf);
+  assert.deepEqual(again.catalogs, {});
+});
+test("a large shelf makes a small backup, and any size can be stored", () => {
+  const url = "https://www.esjzone.cc/detail/1.html";
+  const big = Array.from({ length: 2000 }, (_, i) => ({ id: String(i), title: "第一千章 很長的章節標題" }));
+  const shelf = Array.from({ length: 501 }, (_, i) => ({
+    ...shelfEntry(`esj:${i}`, "esj", url),
+    book: { ...shelfEntry(`esj:${i}`, "esj", url).book, chapters: big },
+  }));
+  const { library } = readBackup({ version: 1, shelf, bookmarks: [] });
+  assert.equal(library.shelf.length, 501, "a large shelf is not rejected");
+  const size = JSON.stringify(library, null, 2).length;
+  assert.ok(size < 1_000_000, `backup is ${size} characters`);
+});
+test("only the records that changed are written", () => {
+  const url = "https://www.esjzone.cc/detail/1.html";
+  const before = validateLibrary({
+    version: 1,
+    shelf: [shelfEntry("esj:1", "esj", url), shelfEntry("esj:2", "esj", url), shelfEntry("esj:3", "esj", url)],
+    bookmarks: [],
+  });
+  const none = diffLibrary(before, before);
+  assert.equal(hasChanges(none), false);
+
+  const reading = { ...before, shelf: before.shelf.map((e) => e.id === "esj:2" ? { ...e, unreadIds: ["x"] } : e) };
+  const one = diffLibrary(before, reading);
+  assert.deepEqual(one.shelfPut.map((e) => e.id), ["esj:2"]);
+  assert.deepEqual(one.shelfDelete, []);
+  assert.equal(one.settings, null);
+
+  const removed = { ...before, shelf: before.shelf.filter((e) => e.id !== "esj:1") };
+  assert.deepEqual(diffLibrary(before, removed).shelfDelete, ["esj:1"]);
+  assert.deepEqual(diffLibrary(before, removed).shelfPut, []);
+
+  const themed = { ...before, settings: { ...before.settings, theme: "dark" } };
+  const theme = diffLibrary(before, themed);
+  assert.equal(theme.settings.theme, "dark");
+  assert.deepEqual(theme.shelfPut, [], "a settings change writes no book");
+});
+test("a new shelf entry carries no catalog", () => {
+  const entry = createEntry({ ...shelfEntry("esj:1", "esj", "https://www.esjzone.cc/detail/1.html").book, chapters: [{ id: "a" }, { id: "b" }], checkedAt: 5 });
+  assert.equal(entry.chapterCount, 2);
+  assert.equal(entry.book.chapters, undefined);
+  assert.equal(entry.checkedAt, 5);
+  assert.deepEqual(readEntry(entry).entry, entry);
+});
 test("libraries saved before SF and Wikisource were removed still load intact", () => {
   const stored = {
     ...EMPTY_LIBRARY,
+    version: 1,
     sources: ["sf", "esj", "ws"],
     shelf: [
       shelfEntry("sf:292551", "sf", "https://m.sfacg.com/b/292551/"),
@@ -124,6 +211,7 @@ test("backups cannot point a book's link at an unknown website", () => {
     () =>
       validateLibrary({
         ...EMPTY_LIBRARY,
+        version: 1,
         shelf: [shelfEntry("esj:1", "esj", "https://evil.example/")],
       }),
     /來源網址/,

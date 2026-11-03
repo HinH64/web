@@ -3,8 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "拾光 · 中文閱讀器",
-  description:
-    "在字裡行間，拾起屬於自己的時光。線上找書、個人書架、舒適閱讀與章節更新。",
+  description: "線上找書、個人書架、閱讀與章節更新。",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/favicon.svg",

@@ -1,21 +1,47 @@
 import {
   EMPTY_LIBRARY,
   type BookDetail,
+  type Catalogs,
   type ChapterContent,
   type Library,
 } from "./types";
-import { validateLibrary } from "./reading";
+import {
+  enabledSources,
+  hasChanges,
+  readBookmark,
+  readDisabledSources,
+  readEntry,
+  sanitizeSettings,
+  type LibraryChanges,
+} from "./reading";
+
+const DB_NAME = "shiguang-reader";
+const CHANNEL = "shiguang-library";
+const SHELF = "shelf";
+const BOOKMARKS = "bookmarks";
+const CATALOGS = "catalogs";
+const STATE = "state";
+const MIGRATED_KEY = "migrated-v2";
+const CLIENT_TIMEOUT_MS = 45_000;
+
 let database: Promise<IDBDatabase> | undefined;
 function db() {
   if (!database)
     database = new Promise<IDBDatabase>((resolve, reject) => {
-      const req = indexedDB.open("shiguang-reader", 1);
+      const req = indexedDB.open(DB_NAME, 2);
       req.onupgradeneeded = () => {
-        for (const name of ["state", "chapters", "books"])
+        for (const name of [STATE, "chapters", "books", SHELF, BOOKMARKS, CATALOGS])
           if (!req.result.objectStoreNames.contains(name))
             req.result.createObjectStore(name);
       };
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        // Lets a newer version of the app upgrade while this tab stays open.
+        req.result.onversionchange = () => {
+          req.result.close();
+          database = undefined;
+        };
+        resolve(req.result);
+      };
       req.onerror = () => reject(req.error);
       req.onblocked = () => reject(new Error("請關閉其他版本的閱讀器後重試"));
     }).catch((e) => {
@@ -24,6 +50,20 @@ function db() {
     });
   return database;
 }
+
+const done = (req: IDBRequest) =>
+  new Promise<void>((resolve, reject) => {
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+
+const finished = (tx: IDBTransaction) =>
+  new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+
 async function get<T>(store: string, key: string): Promise<T | undefined> {
   const d = await db();
   return new Promise((resolve, reject) => {
@@ -32,26 +72,158 @@ async function get<T>(store: string, key: string): Promise<T | undefined> {
     req.onerror = () => reject(req.error);
   });
 }
+
 async function put(store: string, key: string, value: unknown) {
   const d = await db();
-  return new Promise<void>((resolve, reject) => {
-    const tx = d.transaction(store, "readwrite");
-    tx.objectStore(store).put(value, key);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error);
+  const tx = d.transaction(store, "readwrite");
+  tx.objectStore(store).put(value, key);
+  return finished(tx);
+}
+
+/**
+ * Moves the single stored library into one record per book, once. The old copy
+ * stays where it is, so a problem here can never lose it. A record that cannot
+ * be read is left in that copy rather than stopping the others from moving.
+ */
+async function migrateOldLibrary() {
+  const d = await db();
+  const tx = d.transaction([STATE, SHELF, BOOKMARKS, CATALOGS], "readwrite");
+  const state = tx.objectStore(STATE);
+  const flag = state.get(MIGRATED_KEY);
+  flag.onsuccess = () => {
+    if (flag.result) return;
+    const old = state.get("library");
+    old.onsuccess = () => {
+      state.put(true, MIGRATED_KEY);
+      const library = old.result;
+      if (!library) return;
+      for (const raw of Array.isArray(library.shelf) ? library.shelf : []) {
+        try {
+          const { entry, chapterIds } = readEntry(raw);
+          tx.objectStore(SHELF).put(entry, entry.id);
+          if (chapterIds) tx.objectStore(CATALOGS).put(chapterIds, entry.book.id);
+        } catch {
+          // Stays in the old copy.
+        }
+      }
+      for (const raw of Array.isArray(library.bookmarks) ? library.bookmarks : []) {
+        try {
+          const bookmark = readBookmark(raw);
+          tx.objectStore(BOOKMARKS).put(bookmark, bookmark.id);
+        } catch {
+          // Stays in the old copy.
+        }
+      }
+      state.put(sanitizeSettings(library.settings), "settings");
+      state.put(readDisabledSources(library.disabledSources), "disabledSources");
+    };
+  };
+  return finished(tx);
+}
+
+/**
+ * Loads the library. A record that cannot be read is skipped and counted, not
+ * deleted: later writes only touch the records they change, so it stays stored.
+ */
+export async function loadLibrary(): Promise<{
+  library: Library;
+  skipped: number;
+}> {
+  await migrateOldLibrary();
+  const d = await db();
+  const tx = d.transaction([STATE, SHELF, BOOKMARKS]);
+  const shelfReq = tx.objectStore(SHELF).getAll();
+  const bookmarkReq = tx.objectStore(BOOKMARKS).getAll();
+  const settingsReq = tx.objectStore(STATE).get("settings");
+  const disabledReq = tx.objectStore(STATE).get("disabledSources");
+  await finished(tx);
+
+  let skipped = 0;
+  const shelf = shelfReq.result.flatMap((raw) => {
+    try {
+      return [readEntry(raw).entry];
+    } catch {
+      skipped++;
+      return [];
+    }
   });
+  const bookmarks = bookmarkReq.result.flatMap((raw) => {
+    try {
+      return [readBookmark(raw)];
+    } catch {
+      skipped++;
+      return [];
+    }
+  });
+  bookmarks.sort((a, b) => b.createdAt - a.createdAt);
+  const disabledSources = readDisabledSources(disabledReq.result);
+  return {
+    skipped,
+    library: {
+      ...structuredClone(EMPTY_LIBRARY),
+      shelf,
+      bookmarks,
+      settings: sanitizeSettings(settingsReq.result),
+      sources: enabledSources(disabledSources),
+      disabledSources,
+    },
+  };
 }
-export async function loadLibrary(): Promise<Library> {
-  const value = await get<Library>("state", "library");
-  return value ? validateLibrary(value) : structuredClone(EMPTY_LIBRARY);
+
+/** Writes only what changed, then tells other tabs to reload. */
+export async function saveChanges(changes: LibraryChanges) {
+  if (!hasChanges(changes)) return;
+  const d = await db();
+  const tx = d.transaction([STATE, SHELF, BOOKMARKS], "readwrite");
+  const shelf = tx.objectStore(SHELF);
+  const bookmarks = tx.objectStore(BOOKMARKS);
+  for (const entry of changes.shelfPut) shelf.put(entry, entry.id);
+  for (const id of changes.shelfDelete) shelf.delete(id);
+  for (const bookmark of changes.bookmarkPut) bookmarks.put(bookmark, bookmark.id);
+  for (const id of changes.bookmarkDelete) bookmarks.delete(id);
+  if (changes.settings) tx.objectStore(STATE).put(changes.settings, "settings");
+  if (changes.disabledSources)
+    tx.objectStore(STATE).put(changes.disabledSources, "disabledSources");
+  await finished(tx);
+  libraryChannel()?.postMessage("changed");
 }
-export async function saveLibrary(value: Library) {
-  await put("state", "library", value);
+
+// One shared object, because a channel does not receive its own messages, while
+// a second object in the same tab would, and the tab would reload after each write.
+let channel: BroadcastChannel | null | undefined;
+function libraryChannel() {
+  if (channel === undefined)
+    channel =
+      typeof BroadcastChannel === "undefined"
+        ? null
+        : new BroadcastChannel(CHANNEL);
+  return channel;
 }
+
+/** Calls back when another tab changed the library. Returns how to stop. */
+export function onLibraryChanged(callback: () => void) {
+  const shared = libraryChannel();
+  shared?.addEventListener("message", callback);
+  return () => shared?.removeEventListener("message", callback);
+}
+
+export const loadCatalog = (bookId: string) =>
+  get<string[]>(CATALOGS, bookId).then((ids) => ids ?? []);
+
+export const saveCatalog = (bookId: string, chapterIds: string[]) =>
+  put(CATALOGS, bookId, chapterIds);
+
+export async function saveCatalogs(catalogs: Catalogs) {
+  const d = await db();
+  const tx = d.transaction(CATALOGS, "readwrite");
+  for (const [bookId, chapterIds] of Object.entries(catalogs))
+    tx.objectStore(CATALOGS).put(chapterIds, bookId);
+  return finished(tx);
+}
+
 async function fetchAPI<T>(params: Record<string, string>): Promise<T> {
   const response = await fetch(`/api/library?${new URLSearchParams(params)}`, {
-    signal: AbortSignal.timeout(22000),
+    signal: AbortSignal.timeout(CLIENT_TIMEOUT_MS),
   });
   const result = (await response.json()) as T & { error?: string };
   if (!response.ok) throw new Error(result.error ?? "暫時無法讀取書源");
@@ -96,42 +268,32 @@ export async function loadChapter(
 }
 async function pruneCache() {
   const d = await db();
-  return new Promise<void>((resolve, reject) => {
-    const tx = d.transaction("chapters", "readwrite");
-    const store = tx.objectStore("chapters");
-    const req = store.getAllKeys();
-    req.onsuccess = () => {
-      const keys = req.result;
-      if (keys.length > 60) {
-        const values = store.getAll();
-        values.onsuccess = () => {
-          const ordered = keys
-            .map((key, i) => ({ key, time: values.result[i].fetchedAt ?? 0 }))
-            .sort((a, b) => a.time - b.time);
-          ordered
-            .slice(0, keys.length - 60)
-            .forEach((x) => store.delete(x.key));
-        };
-      }
+  const tx = d.transaction("chapters", "readwrite");
+  const store = tx.objectStore("chapters");
+  const req = store.getAllKeys();
+  req.onsuccess = () => {
+    const keys = req.result;
+    if (keys.length <= 60) return;
+    const values = store.getAll();
+    values.onsuccess = () => {
+      keys
+        .map((key, i) => ({ key, time: values.result[i].fetchedAt ?? 0 }))
+        .sort((a, b) => a.time - b.time)
+        .slice(0, keys.length - 60)
+        .forEach((x) => store.delete(x.key));
     };
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+  };
+  return finished(tx);
 }
 export async function cacheCount(): Promise<number> {
   const d = await db();
-  return new Promise((resolve, reject) => {
-    const q = d.transaction("chapters").objectStore("chapters").count();
-    q.onsuccess = () => resolve(q.result);
-    q.onerror = () => reject(q.error);
-  });
+  const req = d.transaction("chapters").objectStore("chapters").count();
+  await done(req);
+  return req.result;
 }
 export async function clearChapterCache() {
   const d = await db();
-  return new Promise<void>((resolve, reject) => {
-    const t = d.transaction("chapters", "readwrite");
-    t.objectStore("chapters").clear();
-    t.oncomplete = () => resolve();
-    t.onerror = () => reject(t.error);
-  });
+  const tx = d.transaction("chapters", "readwrite");
+  tx.objectStore("chapters").clear();
+  return finished(tx);
 }

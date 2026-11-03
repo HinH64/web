@@ -47,22 +47,26 @@ npm run lint
 
 | 位置 | 用途 |
 | --- | --- |
-| `web/app/page.tsx` | 書架、搜尋、更新、書籤、書源與設定 |
-| `web/app/reading-room.tsx` | 閱讀、段落定位、書籤、章節操作 |
+| `web/components/reader/app.tsx` | 版面、側欄與工作區路由 |
+| `web/components/reader/library-context.tsx` | 書架狀態、儲存、更新檢查 |
+| `web/components/reader/search-view.tsx`、`book-view.tsx`、`lists-view.tsx`、`settings-view.tsx` | 首頁與搜尋、書籍與目錄、更新與書籤、設定 |
+| `web/components/reader/reader-view.tsx` | 閱讀、段落定位、書籤、換源與來源失效切換 |
+| `web/lib/reader/route.ts`、`search-store.ts` | 網址路由、跨來源搜尋 |
 | `web/app/api/library/route.ts` | 書源 API |
 | `web/lib/reader/sources/service.ts` | 統一書源服務：識別碼驗證、快取、章節歸屬檢查 |
 | `web/lib/reader/sources/registry.ts` | 已接通書源的設定與解析規則 |
 | `web/lib/reader/sources/rule-engine.ts` | 依規則執行搜尋／目錄／正文解析 |
 | `web/lib/reader/sources/http.ts` | 請求層：網域白名單、轉址、限流、頁面解碼、錯誤分類；可替換傳輸方式 |
 | `web/lib/reader/sources/encoding.ts` | GBK／Big5 查詢字串編碼 |
-| `web/lib/reader/storage.ts` | IndexedDB、書籍／章節快取 |
-| `web/lib/reader/reading.ts` | 更新差異、段落定位與備份驗證 |
+| `web/lib/reader/storage.ts` | IndexedDB：逐筆保存書架與書籤、舊資料遷移、分頁同步、章節快取 |
+| `web/lib/reader/reading.ts` | 更新差異、段落定位、紀錄與備份驗證、變更比對 |
+| `web/lib/reader/works.ts` | 按書名合併來源、選擇來源、跨來源對應章節 |
 | `web/lib/reader/requested-sources.ts` | 60 個書源名稱，即書源範圍 |
 | `web/public/sw.js` | 正式版應用程式外殼與靜態資源離線快取 |
 
 ## 目前界線
 
-書架與紀錄依瀏覽器保存，尚未加入帳戶與跨裝置同步。沒有關閉後的背景排程、推播、TTS、TXT / EPUB 匯入或 `.ibs` 通用匯入。各版本書籍的進度分別保存；更換來源時請確認書名、作者、版本與章節。
+書架與紀錄依瀏覽器保存，尚未加入帳戶與跨裝置同步。沒有關閉後的背景排程、推播、TTS、TXT / EPUB 匯入或 `.ibs` 通用匯入。同一本書只佔書架一格；換來源時依章節名稱對應，無法確定時由使用者選擇章節。
 
 書源只讀取公開可取得的文字。付費、需登入、外連或網站驗證的章節提供原站入口。新增來源須完成實際取用驗證後才加入可搜尋列表。
 

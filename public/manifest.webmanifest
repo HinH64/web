@@ -3,12 +3,12 @@
   "name": "拾光 · 中文閱讀器",
   "short_name": "拾光閱讀",
   "lang": "zh-Hant",
-  "description": "一本書，一個世界。一段只屬於你的時光。",
+  "description": "線上找書、個人書架、閱讀與章節更新。",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#faf9f5",
-  "theme_color": "#44634f",
+  "theme_color": "#faf9f5",
   "icons": [
     {
       "src": "/icon-192.png",
