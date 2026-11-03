@@ -49,8 +49,10 @@ test("52書庫 keeps clean book identity and the complete ordered page catalog",
       <li class="mulu"><a href="/yanqing/02_b/Test1_3.html">第2页</a></li>
       <li class="mulu"><a href="/yanqing/02_b/Test1_2.html">重複頁</a></li></ul>`),
     "https://www.52shuku.net/yanqing/02_b/Test1_2.html": html(`
-      <article class="article-content"><p>小林走進城門。</p>
+      <article class="article-content"><p>【52书库将分享好看的小说，https://www.52shuku.example/】</p>
+      <p>小林走進城門。</p>
       <p>她看了看<a href="/Tags_Nan/fixture.html">天空</a>。</p>
+      <p>传送门：在城門後打開。</p>
       <p>作者有话要说：明天繼續。</p>
       <div class="pagination2"><a href="Test1_3.html">下一页</a></div>
       <p>哦豁，小伙伴们如果觉得52书库不错，记得收藏网址。</p>
@@ -67,7 +69,7 @@ test("52書庫 keeps clean book identity and the complete ordered page catalog",
   assert.deepEqual(book.chapters.map((c) => c.id), ["2", "3", "10"]);
   const chapter = await service.getChapter(book.id, book.firstChapter);
   assert.deepEqual(chapter.paragraphs, [
-    "小林走進城門。", "她看了看天空。", "作者有话要说：明天繼續。",
+    "小林走進城門。", "她看了看天空。", "传送门：在城門後打開。", "作者有话要说：明天繼續。",
   ]);
   assert.equal(sourceChapterUrl(book, "3"), "https://www.52shuku.net/yanqing/02_b/Test1_3.html");
 });
@@ -76,10 +78,11 @@ test("同人小說網 uses simplified GBK POST and removes edition labels from t
   const searchUrl = "https://www.trxs.cc/e/search/index.php";
   const { transport: pages } = fakeSite({
     [searchUrl]: html(`<div class="books"><div class="bk"><a href="/tongren/42.html">
-      <h3>云城(1-3卷19章)</h3><div class="booknews">作者:小林  <label>2.01 MB</label> 2026-11-02</div>
+      <h3>云城(1-3卷19章)
+      </h3><div class="booknews">作者:小林  <label>2.01 MB</label> 2026-11-02</div>
       </a></div></div>`),
     "https://www.trxs.cc/tongren/42.html": html(`
-      <div class="book_info"><h1>云城(全本)</h1><div class="date"><a href="/author/1/xiaolin.html">小林</a></div></div>
+      <div class="book_info"><h1>云城(全本) </h1><div class="date"><a href="/author/1/xiaolin.html">小林</a></div></div>
       <div class="book_list"><ul><li><a href="/tongren/42/10.html">第10节</a></li>
       <li><a href="/tongren/42/2.html">第2节</a></li>
       <li><a href="/tongren/99/1.html">其他書</a></li></ul></div>`),
@@ -106,6 +109,82 @@ test("同人小說網 uses simplified GBK POST and removes edition labels from t
   assert.deepEqual(book.chapters.map((c) => c.id), ["2", "10"]);
   const chapter = await service.getChapter(book.id, book.firstChapter);
   assert.deepEqual(chapter.paragraphs, ["小林出發了。", "她帶著一張地圖。"]);
+});
+
+test("an Empire CMS notice is a failure, not zero books, and is not cached", async () => {
+  const notice = (text) => html(`<title>信息提示</title><div class="msg">${text}</div>`);
+  let page = notice("没有搜索到相关的内容");
+  let requests = 0;
+  const service = createSourceService({
+    sleep: noSleep,
+    transport: async () => (requests++, page.clone()),
+  });
+  for (const id of ["trxs", "ffxs", "fushu"])
+    assert.deepEqual(await service.search(id, "雲城"), [], id);
+  page = notice("系统限制的搜索间隔时间为5秒");
+  await assert.rejects(service.search("trxs", "木葉"), { kind: "parse_error" });
+  await assert.rejects(service.search("trxs", "木葉"), { kind: "parse_error" });
+  assert.equal(requests, 5);
+});
+
+test("飯飯小說 strips page ranges from titles in search and on the book page", async () => {
+  const { transport } = fakeSite({
+    "https://www.ffxs8.com/e/search/index.php": html(`<div class="list"><ul><li>
+      <div class="title"><strong><a href="/dsyq/42">云城(1-159)
+      </a></strong></div></li></ul></div>`),
+    "https://www.ffxs8.com/dsyq/42": html(`<h1>云城(1-159) </h1>
+      <div class="descTip"><p class="author"><span>作者：小林</span></p></div>
+      <div class="catalog"><ul><li><a href="/book/42-1-1.html">1-10节</a></li></ul></div>`),
+  });
+  const service = createSourceService({ transport, sleep: noSleep });
+  const [result] = await service.search("ffxs", "雲城");
+  assert.equal(result.title, "云城");
+  const book = await service.getBook(result.id);
+  assert.equal(book.title, "云城");
+  assert.equal(book.author, "小林");
+});
+
+test("就愛讀 removes the site notice from inside a paragraph and keeps the rest", async () => {
+  const { transport } = fakeSite({
+    "https://www.95dxs.com/info/3/42.html": html(`<title>云城|小林</title>
+      <a href="/author/1.html">小林</a><dl class="index"><dd><a href="/reader/3/42/7.html">第一章 出城</a></dd></dl>`),
+    "https://www.95dxs.com/reader/3/42/7.html": html(`<div id="acontent">
+      <p>第一章 出城</p><p>小林走了。 首发--无弹出广告</p><p>明天見。/book/(未完待续。)</p></div>`),
+  });
+  const service = createSourceService({ transport, sleep: noSleep });
+  const book = await service.getBook("jiuaidu:3/42");
+  assert.equal(book.title, "云城");
+  const chapter = await service.getChapter(book.id, "7");
+  assert.deepEqual(chapter.paragraphs, ["小林走了。", "明天見。(未完待续。)"]);
+});
+
+test("a short or numeric chapter title removes only an exact repeated heading", async () => {
+  const config = {
+    ...esj, id: "short", hosts: ["s.example"],
+    rule: {
+      ...esj.rule,
+      book: {
+        url: "https://s.example/b/{bookKey}", title: { selector: "h1" },
+        chapters: { item: "li a", key: { attr: "href", pattern: "^/c/(\\d+)$" }, title: {} },
+      },
+      chapter: { url: "https://s.example/c/{chapterKey}", content: "article" },
+    },
+  };
+  const { transport } = fakeSite({
+    "https://s.example/b/1": html(`<h1>雲城</h1><ul><li><a href="/c/1">1</a></li>
+      <li><a href="/c/2">2</a></li><li><a href="/c/3">序</a></li><li><a href="/c/4">第一章 出城</a></li></ul>`),
+    "https://s.example/c/1": html(`<article><p>1</p><p>小林出發了。</p></article>`),
+    "https://s.example/c/2": html(`<article><p>2018年的春天</p><p>小林出發了。</p></article>`),
+    "https://s.example/c/3": html(`<article><p>序曲響起了</p></article>`),
+    "https://s.example/c/4": html(`<article><p>第一章 出城（求收藏）</p><p>小林出發了。</p></article>`),
+  });
+  const service = createSourceService({ configs: [config], transport, sleep: noSleep });
+  const book = await service.getBook("short:1");
+  const read = async (id) => (await service.getChapter(book.id, id)).paragraphs;
+  assert.deepEqual(await read("1"), ["小林出發了。"]);
+  assert.deepEqual(await read("2"), ["2018年的春天", "小林出發了。"]);
+  assert.deepEqual(await read("3"), ["序曲響起了"]);
+  assert.deepEqual(await read("4"), ["小林出發了。"]);
 });
 
 const esjPages = {
@@ -686,7 +765,7 @@ test("volume catalogs preserve site order, distinguish repeated titles and skip 
       <section class="volume"><h2>第二卷</h2><ul><li><a href="/c/20">序幕</a></li>
       <li><a href="/c/20">重複</a></li></ul></section>`),
     "https://v.example/b/2": html(`<h1>雲城</h1><section class="volume"><a href="/c/1">章節</a></section>`),
-    "https://v.example/c/90": html(`<article>小林走進城門。</article>`),
+    "https://v.example/c/90": html(`<article><p>序幕</p><p>小林走進城門。</p></article>`),
   });
   const service = createSourceService({ configs: [config], transport, sleep: noSleep });
   const book = await service.getBook("volumes:1");
@@ -729,83 +808,122 @@ function fushuWindow(page, visible, title = "雲城（GL百合）——小林") 
     <div class="page-control"><ul class="pagination">${links}</ul></div></div>`);
 }
 
-test("福書網 follows sliding windows to the terminal page and includes unsuffixed page 1", async () => {
-  const { transport, requested } = fakeSite({
-    "https://www.fushuzhijia.com/book/42.html": fushuWindow(1, [1, 2, 3, 4]),
-    "https://www.fushuzhijia.com/book/42_4.html": fushuWindow(4, [2, 3, 4, 5, 6]),
-    "https://www.fushuzhijia.com/book/42_6.html": fushuWindow(6, [4, 5, 6]),
+/** A 福書網 book of `pages` pages, with the site's pager, which shows nearby pages only. */
+function fushuBook(pages, override = () => undefined) {
+  const requested = [];
+  const fushu = SOURCES.find((s) => s.id === "fushu");
+  const service = createSourceService({
+    configs: [{ ...fushu, minIntervalMs: 0 }],
+    sleep: noSleep,
+    transport: async (url) => {
+      requested.push(url.href);
+      const n = Number(url.pathname.match(/_(\d+)\.html$/)?.[1] ?? 1);
+      const custom = override(n);
+      if (custom) return custom;
+      if (n > pages) return html("missing", { status: 404 });
+      const visible = [];
+      for (let p = Math.max(1, n - 2); p <= Math.min(pages, Math.max(n + 3, 6)); p++) visible.push(p);
+      return fushuWindow(n, visible);
+    },
   });
-  const service = createSourceService({ transport, sleep: noSleep });
+  return { service, requested };
+}
+
+test("福書網 finds the last page in a few requests and includes unsuffixed page 1", async () => {
+  const { service, requested } = fushuBook(6);
   const book = await service.getBook("fushu:42");
   assert.equal(book.title, "雲城");
   assert.equal(book.author, "小林");
   assert.deepEqual(book.chapters.map((c) => c.id), ["1", "2", "3", "4", "5", "6"]);
-  assert.deepEqual(requested, [
-    "https://www.fushuzhijia.com/book/42.html",
-    "https://www.fushuzhijia.com/book/42_4.html",
-    "https://www.fushuzhijia.com/book/42_6.html",
-  ], "reads the furthest visible window, without downloading every text page");
+  assert.equal(book.chapters[1].title, "第 2 頁");
+  assert.equal(requested.length, 4);
   const first = await service.getChapter(book.id, book.firstChapter);
   assert.equal(first.url, "https://www.fushuzhijia.com/book/42.html");
   assert.equal(sourceChapterUrl(book, "1"), first.url);
   assert.equal(sourceChapterUrl(book, "2"), "https://www.fushuzhijia.com/book/42_2.html");
   assert.deepEqual(first.paragraphs, ["小林帶著地圖出發。", "作者附言：明天繼續。"]);
   assert.ok(!requested.some((u) => u.endsWith("_1.html")));
+
+  for (const pages of [181, 300, 1000]) {
+    const long = fushuBook(pages);
+    const catalog = await long.service.getBook("fushu:42");
+    assert.equal(catalog.chapters.length, pages);
+    assert.equal(catalog.chapters.at(-1).id, String(pages));
+    assert.ok(long.requested.length <= 2 * Math.log2(pages) + 2, `${pages} pages: ${long.requested.length} requests`);
+  }
 });
 
-test("a failed, redirected or incomplete later window fails the entire numbered catalog", async () => {
-  for (const [later, expected] of [
-    [html("missing", { status: 404 }), "not_found"],
-    [fushuWindow(1, [1, 2, 3]), "parse_error"],
-    [fushuWindow(3, [1, 2, 3], "別本書（GL百合）——小林"), "parse_error"],
-    [html("<div>changed template</div>"), "parse_error"],
+test("a one-page numbered book needs no pager", async () => {
+  const { service, requested } = fushuBook(1, () => html(`
+    <div class="book-top"><h1>雲城（GL百合）——小林</h1></div><div class="newstext">小林帶著地圖出發。</div>`));
+  const book = await service.getBook("fushu:42");
+  assert.deepEqual(book.chapters.map((c) => c.id), ["1"]);
+  assert.equal(requested.length, 1);
+  assert.deepEqual((await service.getChapter(book.id, "1")).paragraphs, ["小林帶著地圖出發。"]);
+});
+
+test("a failed, redirected or contradicting page fails the entire numbered catalog", async () => {
+  for (const [page, expected] of [
+    [() => html("server error", { status: 500 }), "http_error"],
+    [() => fushuWindow(1, [1, 2, 3]), "parse_error"],
+    [(n) => fushuWindow(n, [n, n + 1], "別本書（GL百合）——小林"), "parse_error"],
+    [() => html("<div>changed template</div>"), "parse_error"],
   ]) {
-    const { transport } = fakeSite({
-      "https://www.fushuzhijia.com/book/42.html": fushuWindow(1, [1, 2, 3]),
-      "https://www.fushuzhijia.com/book/42_3.html": later,
-    });
-    const service = createSourceService({ transport, sleep: noSleep });
+    const { service } = fushuBook(50, (n) => (n === 12 ? page(n) : undefined));
     await assert.rejects(service.getBook("fushu:42"), { kind: expected });
   }
-  const { transport } = fakeSite({
-    "https://www.fushuzhijia.com/book/42.html": fushuWindow(1, [1, 3, 4]),
-    "https://www.fushuzhijia.com/book/42_4.html": fushuWindow(4, [3, 4]),
-  });
-  await assert.rejects(createSourceService({ transport, sleep: noSleep }).getBook("fushu:42"), { kind: "parse_error" });
+  // Page 12 is missing, yet page 9 links to it.
+  const { service } = fushuBook(50, (n) => (n === 12 ? html("missing", { status: 404 }) : undefined));
+  await assert.rejects(service.getBook("fushu:42"), { kind: "parse_error" });
 });
 
-test("endless numbered windows fail at the bound instead of returning a partial catalog", async () => {
-  let requests = 0;
-  const service = createSourceService({
-    configs: [{ ...SOURCES.find((s) => s.id === "fushu"), minIntervalMs: 0 }],
-    sleep: noSleep,
-    transport: async (url) => {
-      requests++;
-      const n = Number(url.pathname.match(/_(\d+)\.html$/)?.[1] ?? 1);
-      return fushuWindow(n, [n, n + 1]);
-    },
-  });
+test("a pager link that is not a plain page number is not trusted", async () => {
+  const { service } = fushuBook(6, (n) => n === 1
+    ? html(`<div class="book-top"><h1>雲城（GL百合）——小林</h1></div><div class="newstext">小林。
+      <ul class="pagination"><li class="active"><span class="page-link">1</span></li>
+      <li><a class="page-link" href="/book/42_2.html">2</a></li>
+      <li><a class="page-link" href="/book/42_9.html">末頁</a></li></ul></div>`)
+    : undefined);
+  const book = await service.getBook("fushu:42");
+  assert.equal(book.chapters.length, 6);
+});
+
+test("endless numbered pages fail at the bound instead of returning a partial catalog", async () => {
+  const { service, requested } = fushuBook(Infinity, (n) => fushuWindow(n, [n, n + 1]));
   await assert.rejects(service.getBook("fushu:42"), { kind: "parse_error" });
-  assert.equal(requests, 64);
+  assert.equal(requested.length, 41);
 });
 
 test("a numbered reading request cannot silently return page 1 for a different page", async () => {
   let wrongPage = false;
-  const service = createSourceService({
-    sleep: noSleep,
-    transport: async (url) => fushuWindow(
-      url.pathname.endsWith("_2.html") && !wrongPage ? 2 : 1, [1, 2],
-    ),
-  });
+  const { service } = fushuBook(2, (n) => (n === 2 && wrongPage ? fushuWindow(1, [1, 2]) : undefined));
   const book = await service.getBook("fushu:42");
   wrongPage = true;
   await assert.rejects(service.getChapter(book.id, "2"), { kind: "parse_error" });
 });
 
+test("a login wall on a numbered page is reported as one", async () => {
+  let wall = false;
+  const { service } = fushuBook(3, (n) => (n === 2 && wall ? html("<div>請先登入</div>") : undefined));
+  const book = await service.getBook("fushu:42");
+  wall = true;
+  await assert.rejects(service.getChapter(book.id, "2"), { kind: "login_required" });
+});
+
+test("reading on uses the catalog it already has, even after it expires", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: 1_000_000 });
+  const { service, requested } = fushuBook(181);
+  const book = await service.getBook("fushu:42");
+  const before = requested.length;
+  t.mock.timers.tick(30 * 60_000);
+  await service.getChapter(book.id, "100");
+  assert.equal(requested.length, before + 1, "only the page itself");
+});
+
 test("愛麗絲書屋 uses the complete catalog, distinct reading IDs and the declared chapter count", async () => {
   const bookPage = (count) => html(`<div class="novel_title">云城</div>
     <div class="novel_info"><p><a href="/search.html?q=小林&f=author">小林</a></p>
-    <p>字 数：1万 · 章 节：${count}</p></div>
+    <p>字 数：1万 · 章&nbsp;节：${count}</p></div>
     <div class="jianjie">内容简介：虛構的旅行故事。爱丽丝书屋提示</div>
     <div class="book_newchap"><a href="/book/88/def456.html">最新章</a></div>`);
   const catalog = html(`<ul class="mulu_list">
@@ -835,6 +953,18 @@ test("愛麗絲書屋 uses the complete catalog, distinct reading IDs and the de
   assert.equal(sourceChapterUrl(book, book.firstChapter), chapter.url);
   assert.deepEqual(chapter.paragraphs, ["小林走進城門。", "她帶著地圖。"]);
   await assert.rejects(service.getBook("alicesw:43"), { kind: "parse_error" });
+
+  // "1,002" is a thousand and two, not one.
+  const links = Array.from({ length: 1002 }, (_, i) => `<a href="/book/88/a${i.toString(16)}.html">第${i + 1}章</a>`);
+  for (const [count, size] of [["1,002", 1002], ["1,002", 1]]) {
+    const { transport: big } = fakeSite({
+      "https://www.alicesw.com/novel/44.html": bookPage(count),
+      "https://www.alicesw.com/other/chapters/id/44.html": html(`<ul class="mulu_list">${links.slice(0, size).join("")}</ul>`),
+    });
+    const loading = createSourceService({ transport: big, sleep: noSleep }).getBook("alicesw:44");
+    if (size === 1002) assert.equal((await loading).chapters.length, 1002);
+    else await assert.rejects(loading, { kind: "parse_error" });
+  }
 });
 
 test("the app's sources are exactly the requested list", () => {

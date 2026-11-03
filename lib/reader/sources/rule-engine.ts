@@ -2,7 +2,7 @@ import { parseHTML } from "linkedom";
 import type { Book, Chapter } from "../types.ts";
 import { encodeQuery } from "./encoding.ts";
 import { SourceError } from "./errors.ts";
-import { fillKeys } from "./template.ts";
+import { chapterUrl, fillKeys } from "./template.ts";
 import type {
   AdapterFactory,
   FieldRule,
@@ -25,7 +25,8 @@ type Dom = {
 };
 
 const MAX_CHAPTER_PAGES = 10;
-const MAX_CATALOG_WINDOWS = 64;
+/** Enough to find the last of a million numbered pages. */
+const MAX_PAGE_PROBES = 40;
 
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -126,10 +127,14 @@ export function readParagraphs(
     )
     .filter(Boolean);
   // Many sites repeat the chapter title as the first line; the reader shows it.
+  // A title such as "2" must match exactly, or "2018年的春天" would go.
   const heading = title ? compact(title) : "";
   const first = paragraphs[0] ? compact(paragraphs[0]) : "";
-  if (heading && first.startsWith(heading) && first.length <= heading.length + 8)
-    paragraphs.shift();
+  const repeated =
+    heading.length < 2 || /^\d+$/.test(heading)
+      ? first === heading
+      : first.startsWith(heading) && first.length <= heading.length + 8;
+  if (heading && repeated) paragraphs.shift();
   return paragraphs;
 }
 
@@ -150,6 +155,110 @@ export function createRuleAdapter(
   const get = (url: string) => http.getText(url, { encoding: rule.encoding });
   const keyPattern = new RegExp(rule.keyPattern);
   const bookUrl = (bookKey: string) => fillKeys(rule.book.url, { bookKey });
+  const withKeys = (pattern: string, vars: Vars) =>
+    pattern.replace(/\{(\w+)\}/g, (_, name: string) => escapeRegex(vars[name] ?? ""));
+
+  /** A catalog that lists its chapters, on the book page or its own page. */
+  async function listedChapters(bookKey: string, doc: Dom) {
+    const c = rule.book.chapters;
+    const catalog = c.url ? parse(await get(fillKeys(c.url, { bookKey }))) : doc;
+    const vars: Vars = { bookKey };
+    const chapters: Chapter[] = [];
+    const seen = new Set<string>();
+    const exclude = c.excludeTitle ? new RegExp(c.excludeTitle) : null;
+    const groups = c.group ? catalog.querySelectorAll(c.group.item) : [catalog];
+    for (const group of groups) {
+      const prefix = c.group && readField(group, c.group.title);
+      if (c.group && !prefix)
+        throw new SourceError("parse_error", "此書的分卷目錄格式已變更");
+      for (const item of group.querySelectorAll(c.item)) {
+        const id = readField(item, c.key, vars);
+        if (!id || seen.has(id)) continue;
+        const title = readField(item, c.title) || "章節";
+        if (exclude?.test(title)) continue;
+        seen.add(id);
+        const chapter: Chapter = {
+          id,
+          title: prefix ? `${prefix} · ${title}` : title,
+        };
+        if (c.locked && item.querySelector(c.locked)) chapter.locked = true;
+        chapters.push(chapter);
+      }
+    }
+    // Checked first, so that a login wall is reported as one.
+    if (!chapters.length)
+      throw new SourceError(
+        "parse_error",
+        "此書目錄需要原站登入或使用外部連結，暫無可讀章節",
+      );
+    if (c.expectedCount) {
+      const declared = readField(doc, c.expectedCount).replace(/[,，\s]/g, "");
+      const expected = /^\d+$/.test(declared) ? Number(declared) : NaN;
+      if (!Number.isSafeInteger(expected) || expected < 1 || chapters.length !== expected)
+        throw new SourceError("parse_error", "目錄與原站標示的章節數不符，未回傳不完整目錄");
+    }
+    if (c.sortByKey) chapters.sort((x, y) => Number(x.id) - Number(y.id));
+    return chapters;
+  }
+
+  /**
+   * A book split into numbered pages whose pager shows only nearby numbers.
+   * Rather than walking the pager, it finds the last page by doubling and then
+   * halving, which takes about 2·log2(pages) requests. The book page is page 1.
+   */
+  async function numberedChapters(bookKey: string, first: Dom, title: string) {
+    const c = rule.book.chapters;
+    const numbered = c.numberedPages!;
+    const pattern = new RegExp(withKeys(numbered.pattern, { bookKey }));
+    const changed = () =>
+      new SourceError("parse_error", "此書的閱讀分頁格式已變更，無法確認完整目錄");
+
+    /** Checks that this is page n of this book, and returns the highest page it links to. */
+    const inspect = (page: Dom, n: number) => {
+      let highest = n;
+      let pager = false;
+      for (const link of page.querySelectorAll(c.item)) {
+        const linked = Number(pattern.exec(link.getAttribute("href") ?? "")?.[1]);
+        // Only plain numbers count, so a "last page" link cannot mislead it.
+        if (!Number.isSafeInteger(linked) || compact(link.textContent ?? "") !== String(linked))
+          continue;
+        pager = true;
+        highest = Math.max(highest, linked);
+      }
+      const current = readField(page, numbered.current);
+      // A one-page book may have no pager at all, only its text.
+      const alone = n === 1 && !pager && !current && !!page.querySelector(rule.chapter.content);
+      if (!alone && (current !== String(n) || readField(page, rule.book.title) !== title))
+        throw changed();
+      return highest;
+    };
+
+    let known = inspect(first, 1); // the highest page known to exist
+    let missing = known === 1 ? 2 : Infinity; // the lowest page known not to
+    for (let probes = 0; known + 1 < missing; probes++) {
+      if (probes >= MAX_PAGE_PROBES)
+        throw new SourceError("parse_error", "閱讀分頁超出目錄檢查上限，未回傳不完整目錄");
+      const n = missing === Infinity ? known * 2 : Math.floor((known + missing) / 2);
+      let page: Dom;
+      try {
+        page = parse(await get(chapterUrl(rule.chapter, bookKey, String(n))));
+      } catch (error) {
+        if (!(error instanceof SourceError) || error.kind !== "not_found") throw error;
+        missing = n;
+        continue;
+      }
+      const highest = inspect(page, n);
+      known = Math.max(known, highest);
+      if (highest === n) missing = Math.min(missing, n + 1);
+    }
+    // A page that links past a missing one means the answers disagree.
+    if (known >= missing)
+      throw new SourceError("parse_error", "此書的閱讀分頁不連續，無法確認完整目錄");
+    return Array.from({ length: known }, (_, i): Chapter => ({
+      id: String(i + 1),
+      title: `第 ${i + 1} 頁`,
+    }));
+  }
 
   return {
     keyPattern,
@@ -220,7 +329,12 @@ export function createRuleAdapter(
 
       const exclude = s.excludeTitle ? new RegExp(s.excludeTitle, "i") : null;
       const results = new Map<string, Book>();
-      for (const item of doc.querySelectorAll(s.item)) {
+      const items = [...doc.querySelectorAll(s.item)];
+      // Otherwise a notice, such as one asking to wait, would be cached as no books.
+      const pageText = () => doc.querySelector("html")?.textContent ?? "";
+      if (!items.length && s.noResults && !pageText().includes(s.noResults))
+        throw new SourceError("parse_error", "書源沒有回傳搜尋結果頁，請稍後再試");
+      for (const item of items) {
         const key = readField(item, s.key);
         const title = readField(item, s.title);
         if (!key || !title || !keyPattern.test(key) || exclude?.test(title))
@@ -248,84 +362,9 @@ export function createRuleAdapter(
       if (!title)
         throw new SourceError("not_found", "找不到這本書，或需要原站登入");
 
-      let catalogUrl = b.chapters.url
-        ? fillKeys(b.chapters.url, { bookKey })
-        : url;
-      let catalog = b.chapters.url ? parse(await get(catalogUrl)) : doc;
-      const vars: Vars = { bookKey };
-      const chapters: Chapter[] = [];
-      const seen = new Set<string>();
-      const exclude = b.chapters.excludeTitle ? new RegExp(b.chapters.excludeTitle) : null;
-      const numbered = b.chapters.numberedPages;
-      const pagePattern = numbered && new RegExp(
-        numbered.pattern.replace(/\{(\w+)\}/g, (_, name: string) => escapeRegex(vars[name] ?? "")),
-      );
-      let catalogPage = 1;
-      for (let windowsRead = 1; ; windowsRead++) {
-        if (numbered && (
-          readField(catalog, numbered.current) !== String(catalogPage) ||
-          readField(catalog, b.title) !== title
-        ))
-          throw new SourceError("parse_error", "此書的閱讀分頁格式已變更，無法確認完整目錄");
-        const groups = b.chapters.group
-          ? catalog.querySelectorAll(b.chapters.group.item)
-          : [catalog];
-        for (const group of groups) {
-          const prefix = b.chapters.group && readField(group, b.chapters.group.title);
-          if (b.chapters.group && !prefix)
-            throw new SourceError("parse_error", "此書的分卷目錄格式已變更");
-          for (const item of group.querySelectorAll(b.chapters.item)) {
-            const id = readField(item, b.chapters.key, vars);
-            if (!id || seen.has(id)) continue;
-            const title = readField(item, b.chapters.title) || "章節";
-            if (exclude?.test(title)) continue;
-            seen.add(id);
-            const chapter: Chapter = {
-              id,
-              title: prefix ? `${prefix} · ${title}` : title,
-            };
-            if (b.chapters.locked && item.querySelector(b.chapters.locked))
-              chapter.locked = true;
-            chapters.push(chapter);
-          }
-        }
-        if (!pagePattern) break;
-        let following: string | undefined;
-        let followingPage = catalogPage;
-        for (const item of catalog.querySelectorAll(b.chapters.item)) {
-          const href = item.getAttribute("href") ?? "";
-          const page = Number(pagePattern.exec(href)?.[1]);
-          if (Number.isSafeInteger(page) && page > followingPage) {
-            following = new URL(href, catalogUrl).href;
-            followingPage = page;
-          }
-        }
-        if (!following) break;
-        if (windowsRead >= MAX_CATALOG_WINDOWS)
-          throw new SourceError("parse_error", "閱讀分頁超出目錄檢查上限，未回傳不完整目錄");
-        catalogUrl = following;
-        catalogPage = followingPage;
-        catalog = parse(await get(catalogUrl));
-      }
-      if (numbered) {
-        if (chapters.length !== catalogPage)
-          throw new SourceError("parse_error", "此書的閱讀分頁不連續，無法確認完整目錄");
-        for (let page = 1; page <= catalogPage; page++)
-          if (!seen.has(String(page)))
-            throw new SourceError("parse_error", "此書的閱讀分頁不連續，無法確認完整目錄");
-      }
-      if (b.chapters.expectedCount) {
-        const expected = Number(readField(doc, b.chapters.expectedCount));
-        if (!Number.isSafeInteger(expected) || expected < 1 || chapters.length !== expected)
-          throw new SourceError("parse_error", "目錄與原站標示的章節數不符，未回傳不完整目錄");
-      }
-      if (!chapters.length)
-        throw new SourceError(
-          "parse_error",
-          "此書目錄需要原站登入或使用外部連結，暫無可讀章節",
-        );
-      if (b.chapters.sortByKey)
-        chapters.sort((x, y) => Number(x.id) - Number(y.id));
+      const chapters = b.chapters.numberedPages
+        ? await numberedChapters(bookKey, doc, title)
+        : await listedChapters(bookKey, doc);
 
       const status = b.status && readField(doc, b.status);
       return {
@@ -347,20 +386,16 @@ export function createRuleAdapter(
     },
 
     async getChapter(bookKey, chapter) {
-      const template = rule.chapter.firstPage?.key === chapter.id
-        ? rule.chapter.firstPage.url
-        : rule.chapter.url;
-      const url = fillKeys(template, {
-        bookKey,
-        chapterKey: chapter.id,
-      });
+      const url = chapterUrl(rule.chapter, bookKey, chapter.id);
       const nextPage = rule.chapter.pagePattern
         ? new RegExp(
-            rule.chapter.pagePattern.replace(/\{(\w+)\}/g, (_, name: string) =>
-              escapeRegex(name === "bookKey" ? bookKey : chapter.id),
-            ),
+            withKeys(rule.chapter.pagePattern, { bookKey, chapterKey: chapter.id }),
           )
         : null;
+      // Volume catalogs prefix the title, but the page repeats only its own part.
+      const heading = rule.book.chapters.group
+        ? chapter.title.split(" · ").at(-1)
+        : chapter.title;
       const paragraphs: string[] = [];
       let pageNumber = 1;
       let pagesRead = 0;
@@ -373,9 +408,6 @@ export function createRuleAdapter(
             ? sliceBetween(html, rule.chapter.between)
             : html,
         );
-        const numbered = rule.book.chapters.numberedPages;
-        if (numbered && readField(doc, numbered.current) !== chapter.id)
-          throw new SourceError("parse_error", "來源回傳了不同的閱讀分頁，請稍後再試");
         const body = doc.querySelector(rule.chapter.content);
         // A missing later page throws too: half a chapter must not look whole.
         if (!body)
@@ -383,6 +415,11 @@ export function createRuleAdapter(
             "login_required",
             "此章節需要原站登入或暫時無法讀取",
           );
+        // Only page 1 of a one-page book may lack a page number.
+        const numbered = rule.book.chapters.numberedPages;
+        const current = numbered && readField(doc, numbered.current);
+        if (numbered && (current ? current !== chapter.id : chapter.id !== "1"))
+          throw new SourceError("parse_error", "來源回傳了不同的閱讀分頁，請稍後再試");
         // Only the lowest higher page number: a "previous page" link can match
         // the same pattern, and following it would repeat the text.
         let following: string | undefined;
@@ -400,7 +437,7 @@ export function createRuleAdapter(
           ...readParagraphs(body, {
             remove: rule.chapter.remove,
             clean: rule.chapter.clean,
-            title: chapter.title,
+            title: heading,
           }),
         );
         pageNumber = followingNumber;

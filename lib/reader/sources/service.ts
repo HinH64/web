@@ -94,8 +94,13 @@ export function createSourceService({
     chapterId: string,
   ): Promise<ChapterContent> {
     const { key, adapter } = parseBookId(bookId);
-    const book = await getBook(bookId);
-    // Only chapters listed in the book's own catalog may be requested.
+    // Only chapters listed in the book's own catalog may be requested. An
+    // expired copy that lists it is enough, so reading on does not reload a
+    // catalog that took many requests to build.
+    const kept = memory.get(`book:${bookId}`)?.value as BookDetail | undefined;
+    const book = kept?.chapters.some((c) => c.id === chapterId)
+      ? kept
+      : await getBook(bookId);
     const chapter = book.chapters.find((c) => c.id === chapterId);
     if (!chapter)
       throw new SourceError("invalid_request", "章節不屬於這本書");

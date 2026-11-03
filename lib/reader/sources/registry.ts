@@ -2,7 +2,7 @@ import {
   REQUESTED_SOURCES,
   type RequestedSourceName,
 } from "../requested-sources.ts";
-import { fillKeys } from "./template.ts";
+import { chapterUrl } from "./template.ts";
 import type { SourceConfig } from "./types.ts";
 
 /**
@@ -545,7 +545,7 @@ const CONFIGS: Partial<Record<RequestedSourceName, SourceConfig>> = {
     name: "福書網",
     short: "福書網",
     logo: "福",
-    description: "小說文庫。支援搜尋與完整閱讀分頁目錄，依原站頁次閱讀。",
+    description: "小說文庫。全書不分章，依原站頁次閱讀。",
     category: "言情 · 耽美 · 同人",
     color: "#8e7895",
     hosts: ["www.fushuzhijia.com"],
@@ -558,6 +558,7 @@ const CONFIGS: Partial<Record<RequestedSourceName, SourceConfig>> = {
         url: "https://www.fushuzhijia.com/e/search/index.php",
         body: "keyboard={query}&show=title",
         queryScript: "cn",
+        noResults: "没有搜索到相关的内容",
         item: ".mipui-xs-item-list",
         key: { selector: ".list-title a", attr: "href", pattern: "^/book/(\\d+)\\.html$" },
         title: { selector: ".list-title a", pattern: "^(.+?)(?:（[^）]+）)?——" },
@@ -569,10 +570,10 @@ const CONFIGS: Partial<Record<RequestedSourceName, SourceConfig>> = {
         author: { selector: '.book-top a[href^="/author/"]' },
         description: { selector: ".book-top .hidden-xs", maxLength: 1500 },
         chapters: {
+          // The pager. Pages have no titles, so key and title are unused.
           item: ".pagination .page-link",
-          key: { pattern: "^\\s*(\\d+)\\s*$" },
+          key: {},
           title: {},
-          sortByKey: true,
           numberedPages: {
             pattern: "^/book/{bookKey}_(\\d+)\\.html$",
             current: { selector: ".pagination .active", pattern: "^\\s*(\\d+)\\s*$" },
@@ -621,7 +622,7 @@ const CONFIGS: Partial<Record<RequestedSourceName, SourceConfig>> = {
           item: ".mulu_list a",
           key: { attr: "href", pattern: "^/book/(\\d+/[a-f0-9]+)\\.html$" },
           title: {},
-          expectedCount: { selector: ".novel_info p", contains: "章 节", pattern: "章\\s*节[：:]\\s*(\\d+)" },
+          expectedCount: { selector: ".novel_info", pattern: "章\\s*[节節]\\s*[：:]\\s*([\\d,，]+)" },
         },
       },
       chapter: {
@@ -668,6 +669,8 @@ const CONFIGS: Partial<Record<RequestedSourceName, SourceConfig>> = {
         url: "https://www.95dxs.com/reader/{bookKey}/{chapterKey}.html",
         content: "#acontent",
         remove: "script,style,iframe",
+        // Site notices inside paragraphs. Only the notice is removed, not the line.
+        clean: ["\\s*首[发發]--无弹出广告\\s*", "/book/(?=\\(未完待续|$)"],
       },
     },
   },
@@ -702,7 +705,7 @@ const CONFIGS: Partial<Record<RequestedSourceName, SourceConfig>> = {
           item: ".list-group a",
           key: { attr: "href", pattern: "^/chapters-(\\d+)$" },
           title: {},
-          excludeTitle: "^(?:插画|插畫|插图|插圖|彩页|彩頁|彩插)$",
+          excludeTitle: "^(?:插画|插畫|插图|插圖|彩页|彩頁|彩插)\\s*\\d*$",
         },
       },
       chapter: {
@@ -731,14 +734,15 @@ const CONFIGS: Partial<Record<RequestedSourceName, SourceConfig>> = {
         body: "keyboard={query}&show=title&classid=0",
         queryEncoding: "gbk",
         queryScript: "cn",
+        noResults: "没有搜索到相关的内容",
         item: ".list li",
         key: { selector: ".title a", attr: "href", pattern: "^/([a-z]+/\\d+)$" },
-        title: { selector: ".title a" },
+        title: { selector: ".title a", strip: "\\s*\\(\\d+-\\d+\\)\\s*$" },
         description: { selector: ".descript", maxLength: 1500 },
       },
       book: {
         url: "https://www.ffxs8.com/{bookKey}",
-        title: { selector: "h1", strip: "\\(\\d+-\\d+\\)$" },
+        title: { selector: "h1", strip: "\\s*\\(\\d+-\\d+\\)\\s*$" },
         author: { selector: ".descTip .author", strip: "^作者：" },
         description: { selector: ".descInfo", maxLength: 1500 },
         chapters: {
@@ -819,16 +823,17 @@ const CONFIGS: Partial<Record<RequestedSourceName, SourceConfig>> = {
         body: "keyboard={query}&show=title&classid=0",
         queryEncoding: "gbk",
         queryScript: "cn",
+        noResults: "没有搜索到相关的内容",
         item: ".books .bk",
         key: { selector: "a", attr: "href", pattern: "^/tongren/(\\d+)\\.html$" },
-        title: { selector: "h3", strip: "\\((?:全本|完本|完结|[\\d卷章节至-]+)\\)$" },
+        title: { selector: "h3", strip: "\\s*\\((?:全本|完本|完结|[\\d卷章节至-]+)\\)\\s*$" },
         author: { selector: ".booknews", pattern: "^作者[:：]\\s*(.+?)\\s+\\d+(?:\\.\\d+)?\\s*[KMG]?B" },
         description: { selector: ".infos p", maxLength: 1500 },
         cover: { selector: "img", attr: "src" },
       },
       book: {
         url: "https://www.trxs.cc/tongren/{bookKey}.html",
-        title: { selector: ".book_info h1", strip: "\\((?:全本|完本|完结|[\\d卷章节至-]+)\\)$" },
+        title: { selector: ".book_info h1", strip: "\\s*\\((?:全本|完本|完结|[\\d卷章节至-]+)\\)\\s*$" },
         author: { selector: '.book_info .date a[href*="/author/"]' },
         description: { selector: ".book_info .infos p", maxLength: 1500 },
         cover: { selector: ".book_info img", attr: "src" },
@@ -889,9 +894,11 @@ const CONFIGS: Partial<Record<RequestedSourceName, SourceConfig>> = {
         url: "https://www.52shuku.net/{bookKey}_{chapterKey}.html",
         content: "article.article-content",
         remove: "script,style,iframe,.pagination2",
+        // Site notices only. A story line can start with 传送门 too.
         clean: [
           "^.*(?:如果觉得52|如果覺得52|觉得52书库不错|覺得52書庫不錯).*$",
-          "^传送门[：:].*$",
+          "^传送门[：:]\\s*排行榜单(?:\\s*\\|.*)?$",
+          "^【[^】]*52(?:书库|書庫)[^】]*(?:https?://|www\\.)[^】]*】$",
         ],
       },
     },
@@ -982,12 +989,6 @@ export function sourceChapterUrl(
   chapterId: string,
 ) {
   const rule = SOURCES.find((s) => s.id === book.source)?.rule?.chapter;
-  const template = rule?.firstPage?.key === chapterId
-    ? rule.firstPage.url
-    : rule?.url;
-  if (!template) return book.url;
-  return fillKeys(template, {
-    bookKey: book.id.slice(book.source.length + 1),
-    chapterKey: chapterId,
-  });
+  if (!rule) return book.url;
+  return chapterUrl(rule, book.id.slice(book.source.length + 1), chapterId);
 }

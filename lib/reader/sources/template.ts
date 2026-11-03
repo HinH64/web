@@ -8,3 +8,14 @@ export function fillKeys(template: string, values: Record<string, string>) {
     (values[name] ?? "").split("/").map(encodeURIComponent).join("/"),
   );
 }
+
+/** A chapter's address. Page 1 of a numbered-page book can have its own. */
+export function chapterUrl(
+  rule: { url: string; firstPage?: { key: string; url: string } },
+  bookKey: string,
+  chapterKey: string,
+) {
+  const template =
+    rule.firstPage?.key === chapterKey ? rule.firstPage.url : rule.url;
+  return fillKeys(template, { bookKey, chapterKey });
+}

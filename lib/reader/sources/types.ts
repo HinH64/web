@@ -64,6 +64,11 @@ export type SourceRule = {
     };
   } | {
     json?: undefined;
+    /**
+     * Text the site shows when nothing matched. When set, a page with no
+     * results and without this text fails instead of meaning no books.
+     */
+    noResults?: string;
     /** Some sites answer a unique match with the book page instead of a list. */
     directHit?: { key: FieldRule; title: FieldRule; author?: FieldRule };
     item: string;
@@ -93,9 +98,11 @@ export type SourceRule = {
       /** Omit image-only entries in a text reader; matches the unprefixed title. */
       excludeTitle?: string;
       /**
-       * A text book whose catalog is a sliding window of numbered reading pages.
-       * Follows the furthest visible page until the last window, then requires
-       * every page ID from 1 to the last page. Not for paginated chapter lists.
+       * A book with no chapters, split into numbered reading pages whose pager
+       * shows only nearby numbers. The book page is page 1. The last page is
+       * found by probing pages with `chapter.url`, so a page past the end must
+       * answer 404. Pager links are the `item` elements; `key` and `title` are
+       * not used, and each page becomes a chapter titled 第 N 頁.
        */
       numberedPages?: {
         /** Link regex capturing the page number. May use {bookKey}. */
@@ -103,7 +110,10 @@ export type SourceRule = {
         /** Active page number, used to detect redirects or changed templates. */
         current: FieldRule;
       };
-      /** Declared chapter count on the book page; a mismatch fails the catalog. */
+      /**
+       * Declared chapter count on the book page; a mismatch fails the catalog.
+       * Commas and spaces in the number are ignored.
+       */
       expectedCount?: FieldRule;
       item: string;
       key: FieldRule;
