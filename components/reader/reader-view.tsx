@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Bookmark as BookmarkIcon,
   ChevronLeft,
@@ -129,6 +129,7 @@ function Reading({
   const scroll = useRef<HTMLDivElement>(null);
   const article = useRef<HTMLElement>(null);
   const shell = useRef<HTMLDivElement>(null);
+  const tocList = useRef<HTMLUListElement>(null);
   const canRecord = useRef(false);
   // Where to land once the text is on screen.
   const landing = useRef<{ chapterId: string; paragraph: number; offset: number } | null>(
@@ -401,6 +402,19 @@ function Reading({
     return wanted ? items.filter((c) => c.shown.includes(wanted)) : items;
   }, [panel, filter, book.chapters, convert]);
 
+  // Opening the chapter list, or reaching another chapter while it is open,
+  // brings the current chapter to the middle of the list if it is out of view.
+  // Only the list scrolls, not the page around it.
+  useLayoutEffect(() => {
+    const list = tocList.current;
+    const item = list?.querySelector<HTMLElement>("button.current");
+    if (!list || !item) return;
+    const box = list.getBoundingClientRect();
+    const at = item.getBoundingClientRect();
+    if (at.top >= box.top && at.bottom <= box.bottom) return;
+    list.scrollTop += at.top - box.top - (box.height - at.height) / 2;
+  }, [panel, chapterId]);
+
   const changeSource = async (targetId: string) => {
     if (!targetId || !entry) return;
     setSwitching(true);
@@ -492,14 +506,14 @@ function Reading({
       </header>
       <div className="reader-body">
         {panel === "toc" && (
-          <aside className="reader-side">
+          <aside className="reader-side toc">
             <input
               aria-label="篩選章節"
               placeholder="篩選章節"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
             />
-            <ul className="chapters compact">
+            <ul className="chapters compact" ref={tocList}>
               {toc.map((c) => (
                 <li key={c.id}>
                   <button

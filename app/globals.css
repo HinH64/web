@@ -832,6 +832,17 @@ ul {
   border-right: 1px solid var(--line);
 }
 
+/* The chapter filter stays in place while the chapters scroll under it. */
+.reader-side.toc {
+  overflow: hidden;
+}
+
+.reader-side.toc .chapters {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .reader-body > .reader-scroll + .reader-side {
   border-right: 0;
   border-left: 1px solid var(--line);
