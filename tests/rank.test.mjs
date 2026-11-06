@@ -73,6 +73,26 @@ test("only known rankings and categories are requested, at 起點's own addresse
   assert.deepEqual(requests, ["https://m.qidian.com/rank/newbook/catid12/"]);
 });
 
+test("a 完本 list has its own address, no categories, and places from its order", async () => {
+  assert.equal(rankUrl("bestsell", -1), "https://m.qidian.com/bestsell/");
+  assert.equal(rankUrl("dashenfinish", -1), "https://m.qidian.com/dashenfinish/");
+  const { transport, requests } = fakeQidian([
+    page([
+      { bName: "完本之书", bAuth: "甲", cat: "都市", state: "完本", desc: "简介" },
+      { bName: "另一本", bAuth: "乙", cat: "历史", state: "完结" },
+    ]),
+  ]);
+  const ranks = createRankService({ transport, sleep: async () => {} });
+  await assert.rejects(ranks.getRank("classic", 21), (e) => e.kind === "invalid_request");
+  assert.deepEqual(requests, []);
+  const list = await ranks.getRank("classic", -1);
+  assert.deepEqual(requests, ["https://m.qidian.com/classic/"]);
+  assert.deepEqual(
+    list.books.map((b) => [b.rank, b.title, b.category]),
+    [[1, "完本之书", "都市"], [2, "另一本", "历史"]],
+  );
+});
+
 test("a list is fetched once per half hour, and an older one stands in when 起點 fails", async () => {
   let clock = 1_000_000;
   const { transport, requests } = fakeQidian([

@@ -3,7 +3,10 @@
  * reading always goes through the connected sources, found by title.
  */
 
-/** The rankings 起點's mobile site lists for its male channel, in its order. */
+/**
+ * The rankings 起點's mobile site lists for its male channel, in its order,
+ * then the three lists on its 完本 page. Those are not split by category.
+ */
 export const RANKS = [
   { id: "yuepiao", name: "月票" },
   { id: "hotsales", name: "暢銷" },
@@ -14,6 +17,9 @@ export const RANKS = [
   { id: "sign", name: "簽約" },
   { id: "newbook", name: "新書" },
   { id: "newauthor", name: "新人" },
+  { id: "bestsell", name: "暢銷完本", finished: true },
+  { id: "dashenfinish", name: "大神完本", finished: true },
+  { id: "classic", name: "經典完本", finished: true },
 ] as const;
 
 /** 起點's own category ids. -1 is the whole site. */
@@ -55,6 +61,10 @@ export type RankList = {
 
 export const isRankId = (id: string): id is RankId =>
   RANKS.some((r) => r.id === id);
+
+/** A list of finished books, which has no categories. */
+export const isFinishedList = (id: string) =>
+  RANKS.some((r) => r.id === id && "finished" in r);
 
 export const isRankCategory = (id: number) =>
   RANK_CATEGORIES.some((c) => c.id === id);

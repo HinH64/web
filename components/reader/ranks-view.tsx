@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import {
   RANK_CATEGORIES,
@@ -14,6 +14,8 @@ import { useLibrary } from "./library-context";
 import { formatDate } from "./shared";
 
 const FRESH_MS = 30 * 60_000;
+// The 完本 lists come last, set apart from the rankings.
+const FIRST_FINISHED = RANKS.findIndex((r) => "finished" in r);
 // This session's lists, so that going back to one shows it at once.
 const lists = new Map<string, RankList>();
 // The sidebar link opens the list chosen last.
@@ -38,9 +40,12 @@ export function RanksView({
 }) {
   const { library, navigate, convert, online } = useLibrary();
   const rank = RANKS.find((r) => r.id === (rankId ?? last.rank)) ?? RANKS[0];
-  const category =
+  const finished = "finished" in rank;
+  // The 完本 lists have no categories, but the choice is kept for the others.
+  const chosen =
     RANK_CATEGORIES.find((c) => c.id === (categoryId ?? last.category)) ??
     RANK_CATEGORIES[0];
+  const category = finished ? RANK_CATEGORIES[0] : chosen;
   const key = `${rank.id}:${category.id}`;
   const [loaded, setLoaded] = useState<{
     key: string;
@@ -70,8 +75,8 @@ export function RanksView({
   }, [key, rank.id, category.id, attempt]);
 
   useEffect(() => {
-    last = { rank: rank.id, category: category.id };
-  }, [rank.id, category.id]);
+    last = { rank: rank.id, category: chosen.id };
+  }, [rank.id, chosen.id]);
 
   // Leaving the page stops waiting for a search.
   useEffect(() => () => lookup.current?.abort(), []);
@@ -80,9 +85,11 @@ export function RanksView({
   const list = current?.list ?? lists.get(key);
   const error = list ? "" : current?.error;
 
-  const go = (rankTo: string, categoryTo: number) =>
+  const go = (rankTo: (typeof RANKS)[number], categoryTo: number) =>
     navigate(
-      { name: "ranks", rank: rankTo, category: categoryTo },
+      "finished" in rankTo
+        ? { name: "ranks", rank: rankTo.id }
+        : { name: "ranks", rank: rankTo.id, category: categoryTo },
       { replace: true },
     );
 
@@ -116,28 +123,34 @@ export function RanksView({
     <div className="page ranks">
       <div className="page-title">
         <h1>榜單</h1>
-        <select
-          aria-label="分類"
-          value={category.id}
-          onChange={(e) => go(rank.id, Number(e.target.value))}
-        >
-          {RANK_CATEGORIES.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        {!finished && (
+          <select
+            aria-label="分類"
+            value={category.id}
+            onChange={(e) => go(rank, Number(e.target.value))}
+          >
+            {RANK_CATEGORIES.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
       <div className="rank-tabs" role="group" aria-label="榜單">
-        {RANKS.map((r) => (
-          <button
-            type="button"
-            key={r.id}
-            aria-pressed={r.id === rank.id}
-            onClick={() => go(r.id, category.id)}
-          >
-            {r.name}
-          </button>
+        {RANKS.map((r, i) => (
+          <Fragment key={r.id}>
+            {i === FIRST_FINISHED && (
+              <span className="rank-divider" aria-hidden="true" />
+            )}
+            <button
+              type="button"
+              aria-pressed={r.id === rank.id}
+              onClick={() => go(r, chosen.id)}
+            >
+              {r.name}
+            </button>
+          </Fragment>
         ))}
       </div>
       {!list && !error && (

@@ -634,6 +634,14 @@ ul {
   font-weight: 500;
 }
 
+.rank-divider {
+  align-self: center;
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--line);
+}
+
 .rank-loading {
   padding: 48px 0;
 }

@@ -1,6 +1,7 @@
 import { SourceError } from "./sources/errors.ts";
 import { createHttp, type Transport } from "./sources/http.ts";
 import {
+  isFinishedList,
   isRankCategory,
   isRankId,
   type RankBook,
@@ -20,6 +21,7 @@ const text = (value: unknown) =>
 /**
  * The server-rendered page carries its list as JSON. Only the first 20 books
  * of each list are there: later pages come from an API that refuses this app.
+ * The 完本 lists have the same form, without places.
  */
 export function parseRankPage(html: string): RankBook[] {
   const json = html.match(
@@ -58,7 +60,9 @@ export function parseRankPage(html: string): RankBook[] {
 }
 
 export const rankUrl = (rank: string, category: number) =>
-  `https://${HOST}/rank/${rank}/${category === -1 ? "" : `catid${category}/`}`;
+  isFinishedList(rank)
+    ? `https://${HOST}/${rank}/`
+    : `https://${HOST}/rank/${rank}/${category === -1 ? "" : `catid${category}/`}`;
 
 export function createRankService({
   transport,
@@ -85,7 +89,11 @@ export function createRankService({
 
   return {
     async getRank(rank: string, category: number): Promise<RankList> {
-      if (!isRankId(rank) || !isRankCategory(category))
+      if (
+        !isRankId(rank) ||
+        !isRankCategory(category) ||
+        (isFinishedList(rank) && category !== -1)
+      )
         throw new SourceError("invalid_request", "沒有這個榜單");
       const key = `${rank}:${category}`;
       const kept = lists.get(key);

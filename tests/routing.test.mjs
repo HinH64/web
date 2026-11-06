@@ -16,6 +16,7 @@ test("every route survives the URL, including ids with slashes and spaces", () =
     { name: "ranks" },
     { name: "ranks", rank: "sign", category: 9 },
     { name: "ranks", rank: "rec", category: -1 },
+    { name: "ranks", rank: "bestsell" },
     { name: "updates" },
     { name: "bookmarks" },
     { name: "settings" },

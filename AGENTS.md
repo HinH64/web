@@ -14,9 +14,9 @@ Scope is the 60 names in `lib/reader/requested-sources.ts`. Do not add anything 
 
 ## Where to work
 
-- Branch from `feature/source-service`. Do not commit to `main`.
+- Branch from `main` into a `feature/` branch. Do not commit to `main` directly, and merge into it only when the user asks.
 - Normally change only `lib/reader/sources/registry.ts` and `SOURCE-VALIDATION.md`.
-- Do not change `lib/reader/types.ts`, `lib/reader/reading.ts`, `lib/reader/storage.ts` or `app/`. The data layer and UI are being rewritten on another branch.
+- Connecting a source should not need changes to the data layer or the UI (`lib/reader/types.ts`, `lib/reader/reading.ts`, `lib/reader/storage.ts`, `app/`, `components/`). If it seems to, ask the user first.
 - If a site needs a new rule option, keep it additive and optional, and add a test in `tests/source-service.test.mjs`. Do not change how existing options behave.
 
 ## Rules
